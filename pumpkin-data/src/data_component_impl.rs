@@ -5,7 +5,7 @@ use crate::data_component::DataComponent;
 use crate::data_component::DataComponent::{
     AttributeModifiers, BlocksAttacks, Consumable, CustomData, CustomName, Damage, DeathProtection,
     Enchantments, Equippable, Food, ItemName, JukeboxPlayable, MaxDamage, MaxStackSize,
-    PotionContents, Tool, Unbreakable,
+    PotionContents, Rarity, Tool, Unbreakable,
 };
 use crate::entity_type::EntityType;
 use crate::tag::{Tag, Taggable};
@@ -23,6 +23,7 @@ use std::any::Any;
 use std::borrow::Cow;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::str::FromStr;
 
 pub trait DataComponentImpl: Send + Sync {
     fn write_data(&self) -> NbtTag {
@@ -49,6 +50,7 @@ pub fn read_data(id: DataComponent, data: &NbtTag) -> Option<Box<dyn DataCompone
         Enchantments => Some(EnchantmentsImpl::read_data(data)?.to_dyn()),
         Damage => Some(DamageImpl::read_data(data)?.to_dyn()),
         Unbreakable => Some(UnbreakableImpl::read_data(data)?.to_dyn()),
+        Rarity => Some(RarityImpl::read_data(data)?.to_dyn()),
         _ => None,
     }
 }
@@ -191,7 +193,23 @@ pub struct ItemModelImpl;
 #[derive(Clone, Hash, PartialEq)]
 pub struct LoreImpl;
 #[derive(Clone, Hash, PartialEq)]
-pub struct RarityImpl;
+pub struct RarityImpl {
+    pub rarity: pumpkin_util::rarity::Rarity,
+}
+impl RarityImpl {
+    fn read_data(data: &NbtTag) -> Option<Self> {
+        pumpkin_util::rarity::Rarity::from_str(data.extract_string()?)
+            .ok()
+            .map(|rarity| Self { rarity })
+    }
+}
+impl DataComponentImpl for RarityImpl {
+    fn write_data(&self) -> NbtTag {
+        NbtTag::String(self.rarity.to_str().to_owned())
+    }
+
+    default_impl!(Rarity);
+}
 #[derive(Clone, Hash, PartialEq)]
 pub struct EnchantmentsImpl {
     pub enchantment: Cow<'static, [(&'static Enchantment, i32)]>,

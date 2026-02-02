@@ -1,8 +1,7 @@
 use pumpkin_data::data_component::DataComponent;
 use pumpkin_data::data_component::DataComponent::Enchantments;
 use pumpkin_data::data_component_impl::{
-    BlocksAttacksImpl, ConsumableImpl, DamageImpl, DataComponentImpl, EnchantmentsImpl, IDSet,
-    MaxDamageImpl, MaxStackSizeImpl, ToolImpl, UnbreakableImpl, get, get_mut, read_data,
+    BlocksAttacksImpl, ConsumableImpl, DamageImpl, DataComponentImpl, EnchantmentsImpl, IDSet, MaxDamageImpl, MaxStackSizeImpl, RarityImpl, ToolImpl, UnbreakableImpl, get, get_mut, read_data
 };
 use pumpkin_data::item::Item;
 use pumpkin_data::recipes::RecipeResultStruct;
@@ -10,6 +9,9 @@ use pumpkin_data::tag::Taggable;
 use pumpkin_data::{Block, Enchantment};
 use pumpkin_nbt::compound::NbtCompound;
 use pumpkin_util::GameMode;
+use pumpkin_util::rarity::Rarity;
+use pumpkin_util::text::TextComponent;
+use pumpkin_util::text::color::Color;
 use std::borrow::Cow;
 use std::cmp::{max, min};
 
@@ -411,6 +413,50 @@ impl ItemStack {
             }
         }
         false
+    }
+
+    /// Returns whether this item stack actually has at least 1 enchant.
+    /// *This function only considers actual enchants, not glints.*
+    pub fn is_enchanted(&self) -> bool {
+        self.get_data_component::<EnchantmentsImpl>()
+            .map_or(false, |e| !e.enchantment.is_empty())
+    }
+
+    /// Gets the displayed rarity of this `ItemStack`.
+    /// Prefer using this for display purposes over getting the underlying component,
+    /// as this also handles enchanted item stacks.
+    pub fn get_rarity(&self) -> Rarity {
+        let base_rarity: Rarity =
+            self.get_data_component::<RarityImpl>()
+                .map_or(Rarity::Common, |c| c.rarity);
+        if self.is_enchanted() {
+            // Improve this stack's displayed rarity.
+            match base_rarity {
+                Rarity::Common | Rarity::Uncommon => Rarity::Rare,
+                _ => base_rarity,
+            }
+        } else {
+            base_rarity
+        }
+    }
+
+    /// Returns a [`TextComponent`] that tells how this `ItemStack` should be displayed
+    /// for hovered text. This is usually used for tooltips in other items, like shulker boxes.
+    /// This does not take rarity into account, and does not make the component *italic*
+    /// if this item stack is custom-named.
+    pub fn get_hover_name(&self) -> TextComponent {
+        // TODO: implement custom name and item name here.
+        return self.item.translated_name()
+    }
+
+    /// Returns a [`TextComponent`] that tells how this `ItemStack` should be displayed.
+    /// This should be used to find how an item stack's name is actually displayed (like in the hotbar).
+    pub fn get_display_name(&self) -> TextComponent {
+        let mut component = 
+            self.get_hover_name()
+                .color(Color::Named(self.get_rarity().color()));
+        
+        component
     }
 
     pub fn write_item_stack(&self, compound: &mut NbtCompound) {

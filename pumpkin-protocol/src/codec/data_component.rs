@@ -3,8 +3,9 @@ use pumpkin_data::Enchantment;
 use pumpkin_data::data_component::DataComponent;
 use pumpkin_data::data_component_impl::{
     DamageImpl, DataComponentImpl, EnchantmentsImpl, MaxStackSizeImpl, PotionContentsImpl,
-    StatusEffectInstance, UnbreakableImpl, get,
+    RarityImpl, StatusEffectInstance, UnbreakableImpl, get,
 };
+use pumpkin_util::rarity::Rarity;
 use serde::de;
 use serde::de::SeqAccess;
 use serde::ser::SerializeStruct;
@@ -260,6 +261,24 @@ fn skip_effect_parameters<'a, A: SeqAccess<'a>>(seq: &mut A) -> Result<(), A::Er
     Ok(())
 }
 
+impl DataComponentCodec<Self> for RarityImpl {
+    fn serialize<T: SerializeStruct>(&self, seq: &mut T) -> Result<(), T::Error> {
+        seq.serialize_field::<VarInt>("", &VarInt::from(self.rarity as u8))
+    }
+    fn deserialize<'a, A: SeqAccess<'a>>(seq: &mut A) -> Result<Self, A::Error> {
+        let rarity = u8::try_from(
+            seq.next_element::<VarInt>()?
+                .ok_or(de::Error::custom("No Rarity VarInt!"))?
+                .0,
+        )
+        .map_err(|_| de::Error::custom("No Rarity VarInt!"))?;
+
+        let rarity =
+            Rarity::try_from(rarity).map_err(|_| de::Error::custom("Invalid Rarity VarInt!"))?;
+        Ok(Self { rarity })
+    }
+}
+
 pub fn deserialize<'a, A: SeqAccess<'a>>(
     id: DataComponent,
     seq: &mut A,
@@ -270,6 +289,7 @@ pub fn deserialize<'a, A: SeqAccess<'a>>(
         DataComponent::Damage => Ok(DamageImpl::deserialize(seq)?.to_dyn()),
         DataComponent::Unbreakable => Ok(UnbreakableImpl::deserialize(seq)?.to_dyn()),
         DataComponent::PotionContents => Ok(PotionContentsImpl::deserialize(seq)?.to_dyn()),
+        DataComponent::Rarity => Ok(RarityImpl::deserialize(seq)?.to_dyn()),
         _ => todo!("{} not yet implemented", id.to_name()),
     }
 }
@@ -284,6 +304,7 @@ pub fn serialize<T: SerializeStruct>(
         DataComponent::Damage => get::<DamageImpl>(value).serialize(seq),
         DataComponent::Unbreakable => get::<UnbreakableImpl>(value).serialize(seq),
         DataComponent::PotionContents => get::<PotionContentsImpl>(value).serialize(seq),
+        DataComponent::Rarity => get::<RarityImpl>(value).serialize(seq),
         _ => todo!("{} not yet implemented", id.to_name()),
     }
 }
