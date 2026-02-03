@@ -41,6 +41,9 @@ impl CommandExecutor for Executor {
 
             let (item_name, item) = ItemArgumentConsumer::find_arg(args, ARG_ITEM)?;
 
+            let display_stack = ItemStack::new(1, item);
+            let item_display = display_stack.get_display_name();
+
             let item_count = match item_count_consumer().find_arg_default_name(args) {
                 Err(_) => 1,
                 Ok(Ok(count)) => count,
@@ -88,30 +91,14 @@ impl CommandExecutor for Executor {
                 TextComponent::translate(
                     "commands.give.success.single",
                     [
-                        TextComponent::text(item_count.to_string()),
-                        TextComponent::text("[")
-                            .add_child(item.translated_name())
-                            .add_child(TextComponent::text("]"))
-                            .hover_event(HoverEvent::ShowItem {
-                                id: item_name.to_string().into(),
-                                count: Some(item_count),
-                            }),
-                        targets[0].get_display_name().await,
+                        item_display
                     ],
                 )
             } else {
                 TextComponent::translate(
                     "commands.give.success.multiple",
                     [
-                        TextComponent::text(item_count.to_string()),
-                        TextComponent::text("[")
-                            .add_child(item.translated_name())
-                            .add_child(TextComponent::text("]"))
-                            .hover_event(HoverEvent::ShowItem {
-                                id: item_name.to_string().into(),
-                                count: Some(item_count),
-                            }),
-                        TextComponent::text(targets.len().to_string()),
+                        item_display
                     ],
                 )
             };

@@ -558,6 +558,11 @@ impl TextComponent {
         self
     }
 
+    /// Wraps this `TextComponent` in square brackets and returns the result.
+    pub fn wrap_in_square_brackets(self) -> Self {
+        TextComponent::translate("chat.square_brackets", [self])
+    }
+
     /// Makes the text bold
     #[must_use]
     pub fn bold(mut self) -> Self {

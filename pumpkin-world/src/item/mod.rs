@@ -12,6 +12,7 @@ use pumpkin_util::GameMode;
 use pumpkin_util::rarity::Rarity;
 use pumpkin_util::text::TextComponent;
 use pumpkin_util::text::color::Color;
+use pumpkin_util::text::hover::HoverEvent;
 use std::borrow::Cow;
 use std::cmp::{max, min};
 
@@ -443,7 +444,7 @@ impl ItemStack {
     /// Returns a [`TextComponent`] that tells how this `ItemStack` should be displayed
     /// for hovered text. This is usually used for tooltips in other items, like shulker boxes.
     /// This does not take rarity into account, and does not make the component *italic*
-    /// if this item stack is custom-named.
+    /// if this item stack is custom-named. This also does not append any [`HoverEvent`]s.
     pub fn get_hover_name(&self) -> TextComponent {
         // TODO: implement custom name and item name here.
         return self.item.translated_name()
@@ -452,11 +453,22 @@ impl ItemStack {
     /// Returns a [`TextComponent`] that tells how this `ItemStack` should be displayed.
     /// This should be used to find how an item stack's name is actually displayed (like in the hotbar).
     pub fn get_display_name(&self) -> TextComponent {
-        let mut component = 
-            self.get_hover_name()
-                .color(Color::Named(self.get_rarity().color()));
-        
-        component
+        // First, get the hovered name.
+        let component = self.get_hover_name();
+        // TODO: make name italic if this has a custom name.
+
+        // Wrap it in square brackets.
+        let component = component.wrap_in_square_brackets();
+        if !self.is_empty() {
+            component
+                .color(Color::Named(self.get_rarity().color()))
+                .hover_event(HoverEvent::ShowItem {
+                    count: Some(self.item_count as i32),
+                    id: Cow::Borrowed(self.item.registry_key)
+                })
+        } else {
+            component
+        }
     }
 
     pub fn write_item_stack(&self, compound: &mut NbtCompound) {
