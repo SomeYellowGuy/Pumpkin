@@ -4,6 +4,7 @@ use crate::serialization::dynamic_ops::DynamicOps;
 use crate::serialization::key_compressor::KeyCompressor;
 use crate::serialization::keyable::Keyable;
 use crate::serialization::lifecycle::Lifecycle;
+use crate::serialization::map_codecs::either::{EitherMapCodec, new_either_map_codec};
 use crate::serialization::map_codecs::validated::{ValidatedMapCodec, new_validated_map_codec};
 use crate::serialization::map_coders::{
     ComappedMapEncoderImpl, CompressorHolder, FlatComappedMapEncoderImpl, FlatMappedMapDecoderImpl,
@@ -14,7 +15,6 @@ use crate::serialization::struct_builder::StructBuilder;
 use crate::serialization::struct_codecs::Field;
 use std::fmt::Display;
 use std::sync::Arc;
-use crate::serialization::map_codecs::either::{new_either_map_codec, EitherMapCodec};
 
 /// A type of *codec* which encodes/decodes fields of a map.
 ///
@@ -251,7 +251,7 @@ pub const fn validate<C: MapCodec>(
 /// their respective types.
 pub const fn either<L: MapCodec, R: MapCodec>(
     left_codec: &'static L,
-    right_codec: &'static R
+    right_codec: &'static R,
 ) -> EitherMapCodec<L, R> {
     new_either_map_codec(left_codec, right_codec)
 }
