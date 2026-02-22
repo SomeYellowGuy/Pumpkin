@@ -20,11 +20,23 @@ static COMPRESSED_VALUE_KEY: &str = "value";
 ///
 /// If you want to implement this trait manually, it requires implementing 3 functions,
 /// which do something depending on a variant type:
+/// - [`KeyDispatchable::key`]
+/// - [`KeyDispatchable::encode`]
 /// - [`KeyDispatchable::decode`]
 /// - [`KeyDispatchable::map_encode`]
 /// - [`KeyDispatchable::map_decode`]
 pub trait KeyDispatchable: Sized {
     type Key;
+
+    /// Gets the unique key of the variant stored.
+    fn key(&self) -> Self::Key;
+
+    /// Encodes a value of this type using an [`Encoder`] implementation of a [`MapEncoder`].
+    fn encode<T: Display + PartialEq + Clone>(
+        &self,
+        input: &Self,
+        ops: &'static impl DynamicOps<Value = T>,
+    ) -> DataResult<T>;
 
     /// Decodes a value to this type using a [`Decoder`] implementation of a [`MapDecoder`].
     fn decode<T: Display + PartialEq + Clone>(
@@ -219,10 +231,25 @@ macro_rules! impl_key_dispatchable {
         @internal,
 
         $(
-            ( $variant:pat, $matched:pat ) => $map_codec:ident
+            ( $variant:pat ) => $map_codec:ident
         ),+
     ) => {
         // Used to silence the warning for a complete `KeyDispatchable` implementation.
+        #[allow(unreachable_patterns)]
+        fn encode<T: std::fmt::Display + PartialEq + Clone>(
+            &self,
+            input: &Self,
+            ops: &'static impl $crate::serialization::dynamic_ops::DynamicOps<Value = T>,
+        ) -> $crate::serialization::data_result::DataResult<T> {
+            match self {
+                $(
+                    $variant => $crate::serialization::map_coders::new_map_encoder_encoder(&$map_codec).encode_start(input, ops),
+                )+
+
+                _ => todo!("Map encode not implemented yet"),
+            }
+        }
+
         #[allow(unreachable_patterns)]
         fn map_encode<T: std::fmt::Display + PartialEq + Clone, B: $crate::serialization::struct_builder::StructBuilder<Value=T>>(&self, input: &Self, ops: &'static impl $crate::serialization::dynamic_ops::DynamicOps<Value=T>, prefix: B) -> B {
             match self {
@@ -230,7 +257,7 @@ macro_rules! impl_key_dispatchable {
                     $variant => $map_codec.encode(input, ops, prefix),
                 )+
 
-                _ => todo!("Encode not implemented yet"),
+                _ => todo!("Map encode not implemented yet"),
             }
         }
     };
@@ -241,7 +268,7 @@ macro_rules! impl_key_dispatchable {
 
         // (Enum::FOO, "foo") => FOO_MAP_CODEC
         $(
-            ( $variant:pat, $matched:pat ) => $map_codec:ident
+            ( $variant:pat, $matched:literal ) => $map_codec:ident
         ),+
 
         $(,)?
@@ -268,7 +295,13 @@ macro_rules! impl_key_dispatchable {
             }
         }
 
-        impl_key_dispatchable!(@internal $(, ( $variant, $matched ) => $map_codec)+);
+        fn key(&self) -> Self::Key {
+            match self {
+                $( $variant => $matched.to_string(), )+
+            }
+        }
+
+        impl_key_dispatchable!(@internal $(, ( $variant ) => $map_codec)+);
     };
 
     // For `KeyDispatchable`s that differentiate using an enum.
@@ -278,7 +311,7 @@ macro_rules! impl_key_dispatchable {
 
         // (Enum::FOO, Key::Foo) => FOO_MAP_CODEC
         $(
-            ( $variant:pat, $matched:pat ) => $map_codec:ident
+            ( $variant:pat, $matched:ident ) => $map_codec:ident
         ),+
 
         $(,)?
@@ -303,7 +336,13 @@ macro_rules! impl_key_dispatchable {
             }
         }
 
-        impl_key_dispatchable!(@internal $(, ( $variant, $matched ) => $map_codec)+);
+        fn key(&self) -> Self::Key {
+            match self {
+                $( $variant => $matched, )+
+            }
+        }
+
+        impl_key_dispatchable!(@internal $(, ( $variant ) => $map_codec)+);
     };
 }
 
@@ -345,7 +384,14 @@ impl<T: KeyDispatchable, M: MapCodec<Value = T::Key>> MapEncoder for KeyDispatch
         ops: &'static impl DynamicOps<Value = U>,
         prefix: B,
     ) -> B {
-        input.map_encode(input, ops, prefix)
+        if ops.compress_maps() {
+            input
+                .map_encode(input, ops, prefix)
+                .add_string_key_value_result(COMPRESSED_VALUE_KEY, input.encode(input, ops))
+        } else {
+            self.key_codec
+                .encode(&input.key(), ops, input.map_encode(input, ops, prefix))
+        }
     }
 }
 
@@ -371,66 +417,203 @@ impl<T: KeyDispatchable, M: MapCodec<Value = T::Key>> MapDecoder for KeyDispatch
     }
 }
 
-#[cfg(test)]
-mod test {
-    use crate::{struct_map_codec};
-    use crate::serialization::codec::{field, FieldMapCodec, INT_CODEC, STRING_CODEC};
-    use crate::serialization::codecs::primitive::*;
-    use crate::serialization::coders::Decoder;
-    use crate::serialization::map_codec::for_getter;
-    use crate::serialization::map_coders::{MapEncoder, MapDecoder};
-    use crate::serialization::struct_codecs::StructMapCodec1;
-
-    use crate::serialization::map_codecs::key_dispatch::*;
-
-    use std::fmt;
-
-    fn simple() {
-
-         pub enum Example {
-         A(String),
-         B { field: i32 }
-         }
-
-         pub static A_MAP_CODEC: StructMapCodec1<Example, FieldMapCodec<StringCodec>> = struct_map_codec!(
-             for_getter(field(&STRING_CODEC, "a_field"), impl_getter_variant!(Example::A(x) => x)),
-             Example::A
-         );
-
-         pub static B_MAP_CODEC: StructMapCodec1<Example, FieldMapCodec<IntCodec>> = struct_map_codec!(
-             for_getter(field(&INT_CODEC, "b_field"),  impl_getter_variant!(Example::B {field: x} => x)),
-             |i| Example::B { field: i }
-         );
-
-         #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-         pub enum ExampleType {
-             A,
-             B
-         }
-
-         // `Display` implementation for our differentiator enum.
-         impl fmt::Display for ExampleType {
-             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                 // We just delegate to the `Debug` implementation.
-                 write!(f, "{:?}", self)
-             }
-         }
-
-         impl KeyDispatchable for Example {
-             // Our macro.
-             impl_key_dispatchable!(
-                 // We use a String to differentiate our enum.
-                 enum ExampleType,
-                 (Self::A(..), ExampleType::A) => A_MAP_CODEC,
-                 (Self::B {..}, ExampleType::B) => B_MAP_CODEC,
-             );
-         }
-    }
-}
-
-pub(crate) const fn new_key_dispatch_map_codec<T: KeyDispatchable, C: MapCodec<Value = T::Key>>(key_codec: C) -> KeyDispatchMapCodec<T, C> {
+pub(crate) const fn new_key_dispatch_map_codec<T: KeyDispatchable, C: MapCodec<Value = T::Key>>(
+    key_codec: C,
+) -> KeyDispatchMapCodec<T, C> {
     KeyDispatchMapCodec {
         key_codec,
         phantom: PhantomData,
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::serialization::codec::{
+        DOUBLE_CODEC, FieldMapCodec, FieldedKeyDispatchCodec, STRING_CODEC, XmapCodec, dispatch,
+        field, list, xmap,
+    };
+    use crate::serialization::codecs::primitive::*;
+    use crate::serialization::coders::{Decoder, Encoder};
+    use crate::serialization::map_codec::for_getter;
+    use crate::serialization::map_coders::{MapDecoder, MapEncoder};
+    use crate::serialization::struct_codecs::{StructMapCodec1, StructMapCodec2};
+    use crate::struct_map_codec;
+
+    use crate::serialization::map_codecs::key_dispatch::*;
+
+    use crate::serialization::codecs::list::ListCodec;
+    use crate::serialization::json_ops;
+    use serde_json::json;
+
+    /// A shape, which can be a circle, rectangle or triangle.
+    #[derive(Debug, PartialEq)]
+    pub enum Shape {
+        Circle { radius: f64 },
+        Rectangle { width: f64, height: f64 },
+        Triangle { sides: [f64; 3] },
+    }
+
+    pub type CircleMapCodec = StructMapCodec1<Shape, FieldMapCodec<DoubleCodec>>;
+    pub static CIRCLE_MAP_CODEC: CircleMapCodec = struct_map_codec!(
+        for_getter(
+            field(&DOUBLE_CODEC, "radius"),
+            impl_getter_variant!(Shape::Circle { radius } => radius)
+        ),
+        |radius| Shape::Circle { radius },
+    );
+
+    pub type RectangleMapCodec =
+        StructMapCodec2<Shape, FieldMapCodec<DoubleCodec>, FieldMapCodec<DoubleCodec>>;
+    pub static RECTANGLE_MAP_CODEC: RectangleMapCodec = struct_map_codec!(
+        for_getter(
+            field(&DOUBLE_CODEC, "width"),
+            impl_getter_variant!(Shape::Rectangle { width, .. } => width)
+        ),
+        for_getter(
+            field(&DOUBLE_CODEC, "height"),
+            impl_getter_variant!(Shape::Rectangle { height, .. } => height)
+        ),
+        |width, height| Shape::Rectangle { width, height },
+    );
+
+    pub type TriangleMapCodec =
+        StructMapCodec1<Shape, FieldMapCodec<XmapCodec<[f64; 3], ListCodec<DoubleCodec>>>>;
+    pub static TRIANGLE_MAP_CODEC: TriangleMapCodec = struct_map_codec!(
+        for_getter(
+            field(
+                &xmap(
+                    &list(&DOUBLE_CODEC, 3, 3),
+                    // The list only allows exactly 3 elements, so this should be fine.
+                    |s| s.try_into().unwrap(),
+                    |s| Vec::from(s)
+                ),
+                "sides"
+            ),
+            impl_getter_variant!(Shape::Triangle { sides, .. } => sides)
+        ),
+        |sides| Shape::Triangle { sides },
+    );
+
+    impl KeyDispatchable for Shape {
+        impl_key_dispatchable!(
+            string,
+            (Self::Circle {..}, "circle") => CIRCLE_MAP_CODEC,
+            (Self::Rectangle {..}, "rectangle") => RECTANGLE_MAP_CODEC,
+            (Self::Triangle {..}, "triangle") => TRIANGLE_MAP_CODEC,
+        );
+    }
+
+    pub static SHAPE_CODEC: FieldedKeyDispatchCodec<Shape, StringCodec> =
+        dispatch::<Shape, StringCodec>(&STRING_CODEC);
+
+    #[test]
+    fn encoding() {
+        // Encoding a circle
+        assert_eq!(
+            SHAPE_CODEC
+                .encode_start(&Shape::Circle { radius: 50.0 }, &json_ops::INSTANCE)
+                .expect("Encoding should succeed"),
+            json!({
+                "type": "circle",
+                "radius": 50.0,
+            })
+        );
+
+        // Encoding a square
+        assert_eq!(
+            SHAPE_CODEC
+                .encode_start(
+                    &Shape::Rectangle {
+                        width: 8.0,
+                        height: 12.5
+                    },
+                    &json_ops::INSTANCE
+                )
+                .expect("Encoding should succeed"),
+            json!({
+                "type": "rectangle",
+                "width": 8.0,
+                "height": 12.5
+            })
+        );
+
+        // Encoding a triangle
+        assert_eq!(
+            SHAPE_CODEC
+                .encode_start(
+                    &Shape::Triangle {
+                        sides: [2.0, 3.0, 4.0],
+                    },
+                    &json_ops::INSTANCE
+                )
+                .expect("Encoding should succeed"),
+            json!({
+                "type": "triangle",
+                "sides": [2.0, 3.0, 4.0]
+            })
+        );
+    }
+
+    #[test]
+    fn decoding() {
+        assert_eq!(
+            SHAPE_CODEC
+                .parse(
+                    json!({
+                        "type": "circle",
+                        "radius": 10.0
+                    }),
+                    &json_ops::INSTANCE
+                )
+                .expect("Decoding should succeed"),
+            Shape::Circle { radius: 10.0 }
+        );
+
+        assert_eq!(
+            SHAPE_CODEC
+                .parse(
+                    json!({
+                        "type": "rectangle",
+                        "width": 12.3,
+                        "height": 45.6
+                    }),
+                    &json_ops::INSTANCE
+                )
+                .expect("Decoding should succeed"),
+            Shape::Rectangle {
+                width: 12.3,
+                height: 45.6
+            }
+        );
+
+        assert_eq!(
+            SHAPE_CODEC
+                .parse(
+                    json!({
+                        "type": "triangle",
+                        "sides": [12, 15, 18]
+                    }),
+                    &json_ops::INSTANCE
+                )
+                .expect("Decoding should succeed"),
+            Shape::Triangle {
+                sides: [12.0, 15.0, 18.0]
+            }
+        );
+
+        assert!(
+            SHAPE_CODEC
+                .parse(
+                    json!({
+                        // There is no `Square` shape.
+                        "type": "square",
+                        "side": 4
+                    }),
+                    &json_ops::INSTANCE
+                )
+                .get_message()
+                .expect("Decoding should fail")
+                .starts_with("Invalid differentiator value")
+        );
     }
 }
