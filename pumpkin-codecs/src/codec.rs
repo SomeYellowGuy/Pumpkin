@@ -63,7 +63,7 @@ use std::hash::Hash;
 /// - [`double_range`]: For `double`s.
 ///
 /// ## Structs
-/// Use the [`crate::struct_codec!`] macro to generate a codec implementation for a struct.
+/// Use the [`crate::struct_codec_alias!`] macro to generate a codec implementation for a struct.
 /// A struct codec can work with up to 16 [`Field`]s, which each take a [`MapCodec`]
 /// and a getter. A `MapCodec` is simply an object that works with one or more keys of a provided map.
 /// Most of them used will be [`FieldMapCodec`]s, which only work with one singular key.
@@ -394,9 +394,9 @@ pub const fn either<L: Codec, R: Codec>(
 
 // Struct codec functions
 
-/// Creates a structure [`Codec`]. This macro supports up to *16* [`Field`]s.
+/// Creates a structure [`MapCodec`] for a struct map codec alias. This macro supports up to *16* [`Field`]s.
 ///
-/// Struct codec types are usually pretty large. To combat this, use `pub type ... = ...` to
+/// Struct map codec types are usually pretty large. To combat this, use `pub type ... = ...` to
 /// only store the complicated type once and never use it again. Rust can easily infer the type
 /// for you after you define your codec.
 ///
@@ -406,7 +406,7 @@ pub const fn either<L: Codec, R: Codec>(
 /// use pumpkin_codecs::map_codec::*;
 /// use pumpkin_codecs::codecs::primitive::*;
 /// use pumpkin_codecs::struct_codecs::*;
-/// use pumpkin_codecs::struct_codec;
+/// use pumpkin_codecs::struct_map_codec;
 ///
 /// // An example struct to make a codec for.
 /// pub struct Person {
@@ -414,18 +414,21 @@ pub const fn either<L: Codec, R: Codec>(
 ///     age: u32
 /// }
 ///
-/// // Type to avoid writing this struct codec's type again.
-/// pub type PersonCodec = StructCodec2<Person, FieldMapCodec<StringCodec>, FieldMapCodec<UintCodec>>;
+/// // Type to avoid writing this struct map codec's type again.
+/// // This is the alias.
+/// pub type PersonMapCodec = StructMapCodec2<Person, FieldMapCodec<StringCodec>, FieldMapCodec<UintCodec>>;
 ///
 /// // The actual codec.
-/// pub static PERSON_CODEC: PersonCodec = struct_codec!(
+/// pub static PERSON_CODEC: PersonMapCodec = struct_map_codec!(
 ///      for_getter(field(&STRING_CODEC, "name"), |person: &Person| &person.name),
 ///      for_getter(field(&UINT_CODEC, "age"), |person: &Person| &person.age),
 ///      |name, age| Person {name, age}
 ///  );
 /// ```
+///
+/// [`Field`]: super::struct_codecs::Field
 #[macro_export]
-macro_rules! struct_codec {
+macro_rules! struct_map_codec {
     ($f1:expr, $f:expr $(,)?) => {
         $crate::struct_codecs::struct_1($f1, $f)
     };
@@ -485,6 +488,48 @@ macro_rules! struct_codec {
         $crate::struct_codecs::struct_16(
             $f1, $f2, $f3, $f4, $f5, $f6, $f7, $f8, $f9, $f10, $f11, $f12, $f13, $f14, $f15, $f16,
             $f,
+        )
+    };
+}
+
+/// Creates a structure [`Codec`] for a struct codec alias. This macro supports up to *16* [`Field`]s.
+///
+/// Struct codec types are usually pretty large. To combat this, use `pub type ... = ...` to
+/// only store the complicated type once and never use it again. Rust can easily infer the type
+/// for you after you define your codec.
+///
+/// # Example
+/// ```rust
+/// use pumpkin_codecs::codec::*;
+/// use pumpkin_codecs::map_codec::*;
+/// use pumpkin_codecs::codecs::primitive::*;
+/// use pumpkin_codecs::struct_codecs::*;
+/// use pumpkin_codecs::struct_codec_alias;
+///
+/// // An example struct to make a codec for.
+/// pub struct Person {
+///     name: String,
+///     age: u32
+/// }
+///
+/// // Type to avoid writing this struct codec's type again.
+/// // This is the alias.
+/// pub type PersonCodec = StructCodec2<Person, FieldMapCodec<StringCodec>, FieldMapCodec<UintCodec>>;
+///
+/// // The actual codec.
+/// pub static PERSON_CODEC: PersonCodec = struct_codec_alias!(
+///      for_getter(field(&STRING_CODEC, "name"), |person: &Person| &person.name),
+///      for_getter(field(&UINT_CODEC, "age"), |person: &Person| &person.age),
+///      |name, age| Person {name, age}
+///  );
+/// ```
+///
+/// [`Field`]: super::struct_codecs::Field
+#[macro_export]
+macro_rules! struct_codec_alias {
+    ($($params:tt)*) => {
+        $crate::codecs::map_codec::MapCodecCodec::Owned(
+            $crate::struct_map_codec!($($params)*)
         )
     };
 }
