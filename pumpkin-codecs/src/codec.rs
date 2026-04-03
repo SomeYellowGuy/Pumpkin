@@ -394,7 +394,7 @@ pub const fn either<L: Codec, R: Codec>(
 
 // Struct codec functions
 
-/// Creates a structure [`MapCodec`] for a struct map codec alias. This macro supports up to *16* [`Field`]s.
+/// Creates a structure [`MapCodec`] for a struct map codec. This macro supports up to *16* [`Field`]s.
 ///
 /// Struct map codec types are usually pretty large. To combat this, use `pub type ... = ...` to
 /// only store the complicated type once and never use it again. Rust can easily infer the type
@@ -492,11 +492,11 @@ macro_rules! struct_map_codec {
     };
 }
 
-/// Creates a structure [`Codec`] for a struct codec alias. This macro supports up to *16* [`Field`]s.
+/// Creates a structure [`Codec`] for a struct codec. This macro supports up to *16* [`Field`]s.
 ///
 /// Struct codec types are usually pretty large. To combat this, do one of the following:
 /// - Use `pub type ... = ...` to only store the complicated type once and never use it again.
-/// Rust can easily infer the type for you after you define your codec.
+///   Rust can easily infer the type for you after you define your codec.
 /// - Use the `zst_codec!` macro to automatically generate a ZST codec that wraps
 ///   the `struct_codec!`-generated codec.
 ///

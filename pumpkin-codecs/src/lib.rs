@@ -177,7 +177,7 @@ impl TryFrom<serde_json::Number> for Number {
 /// A prelude for the `zst_codec!` macro.
 pub mod zst_codec_prelude {
     #![allow(unused_imports)]
-    
-    use crate::coders::{Encoder, Decoder};
+
     use crate::HasValue;
+    use crate::coders::{Decoder, Encoder};
 }
