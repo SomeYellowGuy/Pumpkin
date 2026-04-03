@@ -684,7 +684,7 @@ mod test {
     use pumpkin_codecs::coders::{Decoder, Encoder};
     use pumpkin_codecs::data_result::DataResult;
     use pumpkin_codecs::map_codec::for_getter;
-    use pumpkin_codecs::struct_codec_alias;
+    use pumpkin_codecs::struct_codec;
     use pumpkin_codecs::struct_codecs::{StructCodec2, StructCodec3};
     use std::collections::HashMap;
 
@@ -920,7 +920,7 @@ mod test {
             FieldMapCodec<NonEmptyStringCodec>,
             FieldMapCodec<UintCodec>,
         >;
-        pub static EMPLOYEE_CODEC: EmployeeCodec = struct_codec_alias!(
+        pub static EMPLOYEE_CODEC: EmployeeCodec = struct_codec!(
             for_getter(field(&NON_EMPTY_STRING_CODEC, "name"), |s: &Employee| &s
                 .name),
             for_getter(
@@ -1071,7 +1071,7 @@ mod test {
 
         pub type TextCodec =
             StructCodec2<Text, FieldMapCodec<StringCodec>, DefaultedFieldCodec<TextAlignmentCodec>>;
-        pub static TEXT_CODEC: TextCodec = struct_codec_alias!(
+        pub static TEXT_CODEC: TextCodec = struct_codec!(
             for_getter(field(&STRING_CODEC, "content"), |t: &Text| &t.content),
             for_getter(
                 optional_field_with_default(&TEXT_ALIGNMENT_CODEC, "alignment", || {
@@ -1192,7 +1192,7 @@ mod test {
             FieldMapCodec<UbyteCodec>,
             DefaultedFieldCodec<ListCodec<StringCodec>>,
         >;
-        pub static DOG_CODEC: DogCodec = struct_codec_alias!(
+        pub static DOG_CODEC: DogCodec = struct_codec!(
             for_getter(field(&STRING_CODEC, "breed"), |t: &Dog| &t.breed),
             for_getter(field(&UBYTE_CODEC, "age"), |t: &Dog| &t.age),
             for_getter(
@@ -1207,7 +1207,7 @@ mod test {
             FieldMapCodec<StringCodec>,
             FieldMapCodec<UnboundedMapCodec<StringCodec, DogCodec>>,
         >;
-        pub static DOG_PARK_CODEC: DogParkCodec = struct_codec_alias!(
+        pub static DOG_PARK_CODEC: DogParkCodec = struct_codec!(
             for_getter(field(&STRING_CODEC, "name"), |p: &DogPark| &p.name),
             for_getter(
                 field(&unbounded_map(&STRING_CODEC, &DOG_CODEC), "dogs"),

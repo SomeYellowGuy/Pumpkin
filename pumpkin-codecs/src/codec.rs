@@ -63,7 +63,7 @@ use std::hash::Hash;
 /// - [`double_range`]: For `double`s.
 ///
 /// ## Structs
-/// Use the [`crate::struct_codec_alias!`] macro to generate a codec implementation for a struct.
+/// Use the [`crate::struct_codec!`] macro to generate a codec implementation for a struct.
 /// A struct codec can work with up to 16 [`Field`]s, which each take a [`MapCodec`]
 /// and a getter. A `MapCodec` is simply an object that works with one or more keys of a provided map.
 /// Most of them used will be [`FieldMapCodec`]s, which only work with one singular key.
@@ -494,9 +494,11 @@ macro_rules! struct_map_codec {
 
 /// Creates a structure [`Codec`] for a struct codec alias. This macro supports up to *16* [`Field`]s.
 ///
-/// Struct codec types are usually pretty large. To combat this, use `pub type ... = ...` to
-/// only store the complicated type once and never use it again. Rust can easily infer the type
-/// for you after you define your codec.
+/// Struct codec types are usually pretty large. To combat this, do one of the following:
+/// - Use `pub type ... = ...` to only store the complicated type once and never use it again.
+/// Rust can easily infer the type for you after you define your codec.
+/// - Use the `zst_codec!` macro to automatically generate a ZST codec that wraps
+///   the `struct_codec!`-generated codec.
 ///
 /// # Example
 /// ```rust
@@ -504,7 +506,7 @@ macro_rules! struct_map_codec {
 /// use pumpkin_codecs::map_codec::*;
 /// use pumpkin_codecs::codecs::primitive::*;
 /// use pumpkin_codecs::struct_codecs::*;
-/// use pumpkin_codecs::struct_codec_alias;
+/// use pumpkin_codecs::struct_codec;
 ///
 /// // An example struct to make a codec for.
 /// pub struct Person {
@@ -517,7 +519,7 @@ macro_rules! struct_map_codec {
 /// pub type PersonCodec = StructCodec2<Person, FieldMapCodec<StringCodec>, FieldMapCodec<UintCodec>>;
 ///
 /// // The actual codec.
-/// pub static PERSON_CODEC: PersonCodec = struct_codec_alias!(
+/// pub static PERSON_CODEC: PersonCodec = struct_codec!(
 ///      for_getter(field(&STRING_CODEC, "name"), |person: &Person| &person.name),
 ///      for_getter(field(&UINT_CODEC, "age"), |person: &Person| &person.age),
 ///      |name, age| Person {name, age}
@@ -526,7 +528,7 @@ macro_rules! struct_map_codec {
 ///
 /// [`Field`]: super::struct_codecs::Field
 #[macro_export]
-macro_rules! struct_codec_alias {
+macro_rules! struct_codec {
     ($($params:tt)*) => {
         $crate::codecs::map_codec::MapCodecCodec::Owned(
             $crate::struct_map_codec!($($params)*)
@@ -615,6 +617,72 @@ where
     <C as HasValue>::Value: PartialEq + Clone,
 {
     new_default_value_provider_map_codec(new_optional_field_map_codec(codec, name, true), factory)
+}
+
+// Wrapper functions
+
+/// Creates a *zero-sized* struct that wraps another codec, usually a struct codec.
+///
+/// This should be used if the (struct) codec is recursive (i.e. one of its fields encodes a value involving the codec itself).
+///
+/// If you use this macro in a module, be sure to import the `zst_codec_prelude` via:
+///
+/// `use pumpkin_codecs::zst_codec_prelude::*;`
+///
+/// # Example
+///
+/// ```
+/// use pumpkin_codecs::codec::*;
+/// use pumpkin_codecs::codecs::list::ListCodec;
+/// use pumpkin_codecs::map_codec::*;
+/// use pumpkin_codecs::codecs::primitive::*;
+/// use pumpkin_codecs::struct_codecs::*;
+/// use pumpkin_codecs::struct_codec;
+/// use pumpkin_codecs::zst_codec;
+///
+/// use pumpkin_codecs::zst_codec_prelude::*;
+///
+/// pub struct Person {
+///     name: String,
+///     age: u32,
+///     children: Vec<Person>
+/// }
+///
+/// // Our inner codec.
+/// type InnerPersonCodec = StructCodec3<Person, FieldMapCodec<StringCodec>, FieldMapCodec<UintCodec>, FieldMapCodec<ListCodec<PersonCodec>>>;
+/// static INNER_PERSON_CODEC: InnerPersonCodec = struct_codec!(
+///      for_getter(field(&STRING_CODEC, "name"), |person: &Person| &person.name),
+///      for_getter(field(&UINT_CODEC, "age"), |person: &Person| &person.age),
+///      for_getter(field(&unbounded_list(&Person::CODEC), "children"), |person: &Person| &person.children),
+///      |name, age, children| Person {name, age, children}
+///  );
+///
+/// // The wrapper ZST codec. This allows us to do recursion.
+/// zst_codec!(pub PersonCodec, Person, INNER_PERSON_CODEC);
+///
+/// pub const PERSON_CODEC: PersonCodec = PersonCodec;
+/// ```
+#[macro_export]
+macro_rules! zst_codec {
+    ($vis:vis $name:ident, $ty:ty, $delegated_codec:ident) => {
+        $vis struct $name;
+
+        impl $crate::HasValue for $name {
+            type Value = $ty;
+        }
+
+        impl $crate::coders::Encoder for $name {
+            fn encode<T: std::fmt::Display + PartialEq + Clone>(&self, input: &Self::Value, ops: &'static impl $crate::dynamic_ops::DynamicOps<Value=T>, prefix: T) -> $crate::data_result::DataResult<T> {
+                $delegated_codec.encode(input, ops, prefix)
+            }
+        }
+
+        impl $crate::coders::Decoder for $name {
+            fn decode<T: std::fmt::Display + PartialEq + Clone>(&self, input: T, ops: &'static impl $crate::dynamic_ops::DynamicOps<Value=T>) -> $crate::data_result::DataResult<(Self::Value, T)> {
+                $delegated_codec.decode(input, ops)
+            }
+        }
+    };
 }
 
 // Assertion functions

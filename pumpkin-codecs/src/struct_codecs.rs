@@ -23,14 +23,14 @@ pub enum Field<T, C: MapCodec + 'static> {
 }
 
 impl<T, C: MapCodec + 'static> Field<T, C> {
-    fn getter(&self) -> &fn(&T) -> &C::Value {
+    pub fn getter(&self) -> &fn(&T) -> &C::Value {
         match self {
             Self::Owned(_, g) => g,
             Self::Borrowed(_, g) => g,
         }
     }
 
-    const fn map_codec(&self) -> &C {
+    pub const fn map_codec(&self) -> &C {
         match self {
             Self::Owned(c, _) => c,
             Self::Borrowed(c, _) => c,
@@ -495,7 +495,7 @@ mod test {
     use crate::json_ops;
     use crate::map_codec::for_getter;
     use crate::struct_codecs::StructCodec3;
-    use crate::{assert_decode, struct_codec_alias};
+    use crate::{assert_decode, struct_codec};
     use serde_json::json;
 
     #[derive(Debug, PartialEq, Eq, Clone)]
@@ -512,7 +512,7 @@ mod test {
         FieldMapCodec<UintCodec>,
     >;
 
-    pub static BOOK_CODEC: BookCodec = struct_codec_alias!(
+    pub static BOOK_CODEC: BookCodec = struct_codec!(
         for_getter(field(&STRING_CODEC, "name"), |book: &Book| &book.name),
         for_getter(field(&STRING_CODEC, "author"), |book: &Book| &book.author),
         for_getter(field(&UINT_CODEC, "pages"), |book: &Book| &book.pages),
@@ -585,7 +585,7 @@ mod test {
             >,
         >;
         pub static BOOKSHELF_CODEC: BookshelfCodec = validate(
-            &struct_codec_alias!(
+            &struct_codec!(
                 for_getter(field(&UINT_CODEC, "id"), |b: &Bookshelf| &b.id),
                 for_getter(
                     optional_field_with_default(&unbounded_list(&BOOK_CODEC), "books", Vec::new),

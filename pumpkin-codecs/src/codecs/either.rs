@@ -99,7 +99,7 @@ mod test {
     use crate::coders::{Decoder, Encoder};
     use crate::json_ops;
     use crate::map_codec::for_getter;
-    use crate::struct_codec_alias;
+    use crate::struct_codec;
     use crate::struct_codecs::StructCodec2;
     use either::Either;
     use serde_json::json;
@@ -161,7 +161,7 @@ mod test {
 
         pub type ComplexNumberCodec =
             StructCodec2<ComplexNumber, FieldMapCodec<DoubleCodec>, FieldMapCodec<DoubleCodec>>;
-        pub static COMPLEX_NUMBER_CODEC: ComplexNumberCodec = struct_codec_alias!(
+        pub static COMPLEX_NUMBER_CODEC: ComplexNumberCodec = struct_codec!(
             for_getter(field(&DoubleCodec, "real"), |n| &n.0),
             for_getter(field(&DoubleCodec, "imaginary"), |n| &n.1),
             ComplexNumber
