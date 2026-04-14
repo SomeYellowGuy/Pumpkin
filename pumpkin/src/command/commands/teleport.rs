@@ -1,24 +1,26 @@
-use pumpkin_data::translation;
-use pumpkin_util::math::position::BlockPos;
-use pumpkin_util::math::vector3::Vector3;
-use pumpkin_util::text::TextComponent;
-
 use crate::command::CommandError;
-use crate::command::CommandResult;
-use crate::command::args::ConsumedArgs;
-use crate::command::args::FindArg;
-use crate::command::args::entities::EntitiesArgumentConsumer;
-use crate::command::args::entity::EntityArgumentConsumer;
-use crate::command::args::position_3d::Position3DArgumentConsumer;
-use crate::command::args::rotation::RotationArgumentConsumer;
-use crate::command::tree::CommandTree;
-use crate::command::tree::builder::{argument, literal};
-use crate::command::{CommandExecutor, CommandSender};
+use crate::command::argument_builder::{ArgumentBuilder, argument, command, literal};
+use crate::command::argument_types::coordinates::rotation::RotationArgumentType;
+use crate::command::argument_types::coordinates::vec3::Vec3ArgumentType;
+use crate::command::argument_types::entity::EntityArgumentType;
+use crate::command::node::{CommandExecutor, CommandExecutorResult};
+use crate::command::node::dispatcher::CommandDispatcher;
 use crate::entity::EntityBase;
 use crate::world::World;
+use pumpkin_data::translation;
+use pumpkin_util::PermissionLvl;
+use pumpkin_util::math::position::BlockPos;
+use pumpkin_util::math::vector3::Vector3;
+use pumpkin_util::permission::{Permission, PermissionDefault, PermissionRegistry};
+use pumpkin_util::text::TextComponent;
+use crate::command::context::command_context::CommandContext;
+use crate::command::context::command_source::CommandSource;
+use crate::command::errors::error_types::CommandErrorType;
 
-const NAMES: [&str; 2] = ["teleport", "tp"];
-const DESCRIPTION: &str = "Teleports entities, including players."; // todo
+pub const INVALID_POSITION_ERROR_TYPE: CommandErrorType<0> = CommandErrorType::new(translation::COMMANDS_TELEPORT_INVALIDPOSITION);
+
+const DESCRIPTION: &str = "Teleports entities.";
+const PERMISSION: &str = "minecraft:command.teleport";
 
 /// position
 const ARG_LOCATION: &str = "location";
@@ -65,16 +67,10 @@ fn resolve_sender_world(
 struct EntitiesToEntityExecutor;
 
 impl CommandExecutor for EntitiesToEntityExecutor {
-    fn execute<'a>(
-        &'a self,
-        _sender: &'a CommandSender,
-        _server: &'a crate::server::Server,
-        args: &'a ConsumedArgs<'a>,
-    ) -> CommandResult<'a> {
+    fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
-            let targets = EntitiesArgumentConsumer::find_arg(args, ARG_TARGETS)?;
-
-            let destination = EntityArgumentConsumer::find_arg(args, ARG_DESTINATION)?;
+            let targets = EntityArgumentType::get_entities(context, ARG_TARGETS).await?;
+            let destination = EntityArgumentType::get_entity(context, ARG_DESTINATION).await?;
             let destination = destination.get_entity();
             let pos = destination.pos.load();
             let yaw = destination.yaw.load();
@@ -101,12 +97,7 @@ impl CommandExecutor for EntitiesToEntityExecutor {
 struct EntitiesToPosFacingPosExecutor;
 
 impl CommandExecutor for EntitiesToPosFacingPosExecutor {
-    fn execute<'a>(
-        &'a self,
-        sender: &'a CommandSender,
-        server: &'a crate::server::Server,
-        args: &'a ConsumedArgs<'a>,
-    ) -> CommandResult<'a> {
+    fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
             let targets = EntitiesArgumentConsumer::find_arg(args, ARG_TARGETS)?;
 
@@ -136,12 +127,7 @@ impl CommandExecutor for EntitiesToPosFacingPosExecutor {
 struct EntitiesToPosFacingEntityExecutor;
 
 impl CommandExecutor for EntitiesToPosFacingEntityExecutor {
-    fn execute<'a>(
-        &'a self,
-        sender: &'a CommandSender,
-        server: &'a crate::server::Server,
-        args: &'a ConsumedArgs<'a>,
-    ) -> CommandResult<'a> {
+    fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
             let targets = EntitiesArgumentConsumer::find_arg(args, ARG_TARGETS)?;
 
@@ -172,12 +158,7 @@ impl CommandExecutor for EntitiesToPosFacingEntityExecutor {
 struct EntitiesToPosWithRotationExecutor;
 
 impl CommandExecutor for EntitiesToPosWithRotationExecutor {
-    fn execute<'a>(
-        &'a self,
-        sender: &'a CommandSender,
-        server: &'a crate::server::Server,
-        args: &'a ConsumedArgs<'a>,
-    ) -> CommandResult<'a> {
+    fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
             let targets = EntitiesArgumentConsumer::find_arg(args, ARG_TARGETS)?;
 
@@ -208,12 +189,7 @@ impl CommandExecutor for EntitiesToPosWithRotationExecutor {
 struct EntitiesToPosExecutor;
 
 impl CommandExecutor for EntitiesToPosExecutor {
-    fn execute<'a>(
-        &'a self,
-        sender: &'a CommandSender,
-        server: &'a crate::server::Server,
-        args: &'a ConsumedArgs<'a>,
-    ) -> CommandResult<'a> {
+    fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
             let targets = EntitiesArgumentConsumer::find_arg(args, ARG_TARGETS)?;
 
@@ -242,12 +218,7 @@ impl CommandExecutor for EntitiesToPosExecutor {
 struct SelfToEntityExecutor;
 
 impl CommandExecutor for SelfToEntityExecutor {
-    fn execute<'a>(
-        &'a self,
-        sender: &'a CommandSender,
-        _server: &'a crate::server::Server,
-        args: &'a ConsumedArgs<'a>,
-    ) -> CommandResult<'a> {
+    fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
             let destination = EntityArgumentConsumer::find_arg(args, ARG_DESTINATION)?;
             let destination = destination.get_entity();
@@ -282,12 +253,7 @@ impl CommandExecutor for SelfToEntityExecutor {
 struct SelfToPosExecutor;
 
 impl CommandExecutor for SelfToPosExecutor {
-    fn execute<'a>(
-        &'a self,
-        sender: &'a CommandSender,
-        _server: &'a crate::server::Server,
-        args: &'a ConsumedArgs<'a>,
-    ) -> CommandResult<'a> {
+    fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
             match sender {
                 CommandSender::Player(player) => {
@@ -316,36 +282,59 @@ impl CommandExecutor for SelfToPosExecutor {
     }
 }
 
-pub fn init_command_tree() -> CommandTree {
-    CommandTree::new(NAMES, DESCRIPTION)
-        .then(argument(ARG_LOCATION, Position3DArgumentConsumer).execute(SelfToPosExecutor))
-        .then(argument(ARG_DESTINATION, EntityArgumentConsumer).execute(SelfToEntityExecutor))
-        .then(
-            argument(ARG_TARGETS, EntitiesArgumentConsumer)
-                .then(
-                    argument(ARG_LOCATION, Position3DArgumentConsumer)
-                        .execute(EntitiesToPosExecutor)
-                        .then(
-                            argument(ARG_ROTATION, RotationArgumentConsumer)
-                                .execute(EntitiesToPosWithRotationExecutor),
-                        )
-                        .then(
-                            literal("facing")
-                                .then(
-                                    literal("entity").then(
-                                        argument(ARG_FACING_ENTITY, EntityArgumentConsumer)
-                                            .execute(EntitiesToPosFacingEntityExecutor),
+async fn perform_teleport(
+    source: &CommandSource,
+    target: &dyn EntityBase,
+    world: &World,
+    pos: Vector3<f64>,
+    // TODO: relatives
+    rotation: Vector2<f64>,
+
+)
+
+pub fn register(dispatcher: &mut CommandDispatcher, registry: &mut PermissionRegistry) {
+    registry.register_permission_or_panic(Permission::new(
+        PERMISSION,
+        DESCRIPTION,
+        PermissionDefault::Op(PermissionLvl::Three),
+    ));
+
+    dispatcher.register_with_aliases(
+        command("teleport", DESCRIPTION)
+            .requires(PERMISSION)
+            .then(argument(ARG_LOCATION, Vec3ArgumentType::Default).executes(SelfToPosExecutor))
+            .then(
+                argument(ARG_DESTINATION, EntityArgumentType::Entity)
+                    .executes(SelfToEntityExecutor),
+            )
+            .then(
+                argument(ARG_TARGETS, EntityArgumentType::Entities)
+                    .then(
+                        argument(ARG_LOCATION, Vec3ArgumentType::Default)
+                            .executes(EntitiesToPosExecutor)
+                            .then(
+                                argument(ARG_ROTATION, RotationArgumentType)
+                                    .executes(EntitiesToPosWithRotationExecutor),
+                            )
+                            .then(
+                                literal("facing")
+                                    .then(
+                                        literal("entity").then(
+                                            argument(ARG_FACING_ENTITY, EntityArgumentType::Entity)
+                                                .executes(EntitiesToPosFacingEntityExecutor),
+                                        ),
+                                    )
+                                    .then(
+                                        argument(ARG_FACING_LOCATION, Vec3ArgumentType::Default)
+                                            .executes(EntitiesToPosFacingPosExecutor),
                                     ),
-                                )
-                                .then(
-                                    argument(ARG_FACING_LOCATION, Position3DArgumentConsumer)
-                                        .execute(EntitiesToPosFacingPosExecutor),
-                                ),
-                        ),
-                )
-                .then(
-                    argument(ARG_DESTINATION, EntityArgumentConsumer)
-                        .execute(EntitiesToEntityExecutor),
-                ),
-        )
+                            ),
+                    )
+                    .then(
+                        argument(ARG_DESTINATION, EntityArgumentType::Entity)
+                            .executes(EntitiesToEntityExecutor),
+                    ),
+            ),
+        &["tp"],
+    );
 }
