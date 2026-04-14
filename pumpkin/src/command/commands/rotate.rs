@@ -1,18 +1,20 @@
 use pumpkin_data::translation;
 use pumpkin_util::math::vector3::Vector3;
+use pumpkin_util::permission::{Permission, PermissionDefault, PermissionRegistry};
+use pumpkin_util::PermissionLvl;
 use pumpkin_util::text::TextComponent;
-
-use crate::command::args::entity::EntityArgumentConsumer;
-use crate::command::args::entity_anchor::{EntityAnchor, EntityAnchorArgumentConsumer};
-use crate::command::args::position_3d::Position3DArgumentConsumer;
-use crate::command::args::rotation::RotationArgumentConsumer;
-use crate::command::args::{ConsumedArgs, FindArg};
-use crate::command::tree::CommandTree;
-use crate::command::tree::builder::{argument, literal};
-use crate::command::{CommandExecutor, CommandResult, CommandSender};
+use crate::command::argument_builder::{argument, command, literal, ArgumentBuilder};
+use crate::command::argument_types::coordinates::rotation::RotationArgumentType;
+use crate::command::argument_types::coordinates::vec3::Vec3ArgumentType;
+use crate::command::argument_types::entity::EntityArgumentType;
+use crate::command::argument_types::entity_anchor::EntityAnchorArgumentType;
+use crate::command::context::command_context::CommandContext;
+use crate::command::node::{CommandExecutor, CommandExecutorResult};
+use crate::command::node::dispatcher::CommandDispatcher;
 
 const NAMES: [&str; 1] = ["rotate"];
 const DESCRIPTION: &str = "Changes the rotation of an entity.";
+const PERMISSION: &str = "minecraft:command.rotate";
 
 const ARG_TARGET: &str = "target";
 const ARG_ROTATION: &str = "rotation";
@@ -34,19 +36,6 @@ fn yaw_pitch_facing_position(
     let pitch_degrees = pitch_radians.to_degrees();
 
     (yaw_degrees as f32, pitch_degrees as f32)
-}
-
-/// Gets the position to look at for an entity, considering the anchor point.
-/// Matches vanilla's `EntityAnchorArgumentType.EntityAnchor.positionAt()`.
-fn get_anchor_position(entity: &crate::entity::Entity, anchor: EntityAnchor) -> Vector3<f64> {
-    let pos = entity.pos.load();
-    match anchor {
-        EntityAnchor::Eyes => {
-            let eye_height = entity.get_eye_height();
-            Vector3::new(pos.x, pos.y + eye_height, pos.z)
-        }
-        EntityAnchor::Feet => pos,
-    }
 }
 
 /// Rotates an entity using vanilla-style rotation logic.
@@ -100,14 +89,9 @@ async fn send_success_message(sender: &CommandSender, target: &dyn crate::entity
 struct RotateToRotationExecutor;
 
 impl CommandExecutor for RotateToRotationExecutor {
-    fn execute<'a>(
-        &'a self,
-        sender: &'a CommandSender,
-        _server: &'a crate::server::Server,
-        args: &'a ConsumedArgs<'a>,
-    ) -> CommandResult<'a> {
+    fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
-            let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
+            let target = EntityArgumentType::get_entity(context, ARG_TARGET).await?;
             let (yaw, yaw_rel, pitch, pitch_rel) =
                 RotationArgumentConsumer::find_arg(args, ARG_ROTATION)?;
 
@@ -123,12 +107,7 @@ impl CommandExecutor for RotateToRotationExecutor {
 struct RotateFacingLocationExecutor;
 
 impl CommandExecutor for RotateFacingLocationExecutor {
-    fn execute<'a>(
-        &'a self,
-        sender: &'a CommandSender,
-        _server: &'a crate::server::Server,
-        args: &'a ConsumedArgs<'a>,
-    ) -> CommandResult<'a> {
+    fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
             let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
             let facing_pos = Position3DArgumentConsumer::find_arg(args, ARG_FACING_LOCATION)?;
@@ -153,12 +132,7 @@ impl CommandExecutor for RotateFacingLocationExecutor {
 struct RotateFacingEntityExecutor;
 
 impl CommandExecutor for RotateFacingEntityExecutor {
-    fn execute<'a>(
-        &'a self,
-        sender: &'a CommandSender,
-        _server: &'a crate::server::Server,
-        args: &'a ConsumedArgs<'a>,
-    ) -> CommandResult<'a> {
+    fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
             let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
             let facing_entity = EntityArgumentConsumer::find_arg(args, ARG_FACING_ENTITY)?;
@@ -185,12 +159,7 @@ impl CommandExecutor for RotateFacingEntityExecutor {
 struct RotateFacingEntityNoAnchorExecutor;
 
 impl CommandExecutor for RotateFacingEntityNoAnchorExecutor {
-    fn execute<'a>(
-        &'a self,
-        sender: &'a CommandSender,
-        _server: &'a crate::server::Server,
-        args: &'a ConsumedArgs<'a>,
-    ) -> CommandResult<'a> {
+    fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
             let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
             let facing_entity = EntityArgumentConsumer::find_arg(args, ARG_FACING_ENTITY)?;
@@ -215,28 +184,38 @@ impl CommandExecutor for RotateFacingEntityNoAnchorExecutor {
     }
 }
 
-pub fn init_command_tree() -> CommandTree {
-    CommandTree::new(NAMES, DESCRIPTION).then(
-        argument(ARG_TARGET, EntityArgumentConsumer)
+pub fn register(dispatcher: &mut CommandDispatcher, registry: &mut PermissionRegistry) {
+    registry.register_permission_or_panic(Permission::new(
+        PERMISSION,
+        DESCRIPTION,
+        PermissionDefault::Op(PermissionLvl::Two),
+    ));
+
+    dispatcher.register(
+        command("rotate", DESCRIPTION)
+            .requires(PERMISSION)
             .then(
-                argument(ARG_ROTATION, RotationArgumentConsumer).execute(RotateToRotationExecutor),
-            )
-            .then(
-                literal("facing")
-                    .then(
-                        literal("entity").then(
-                            argument(ARG_FACING_ENTITY, EntityArgumentConsumer)
-                                .execute(RotateFacingEntityNoAnchorExecutor)
-                                .then(
-                                    argument(ARG_FACING_ANCHOR, EntityAnchorArgumentConsumer)
-                                        .execute(RotateFacingEntityExecutor),
-                                ),
+                argument(ARG_TARGET, EntityArgumentType::Entity)
+                .then(
+                    argument(ARG_ROTATION, RotationArgumentType).executes(RotateToRotationExecutor),
+                )
+                .then(
+                    literal("facing")
+                        .then(
+                            literal("entity").then(
+                                argument(ARG_FACING_ENTITY, EntityArgumentType::Entity)
+                                    .executes(RotateFacingEntityNoAnchorExecutor)
+                                    .then(
+                                        argument(ARG_FACING_ANCHOR, EntityAnchorArgumentType)
+                                            .executes(RotateFacingEntityExecutor),
+                                    ),
+                            ),
+                        )
+                        .then(
+                            argument(ARG_FACING_LOCATION, Vec3ArgumentType::Default)
+                                .executes(RotateFacingLocationExecutor),
                         ),
-                    )
-                    .then(
-                        argument(ARG_FACING_LOCATION, Position3DArgumentConsumer)
-                            .execute(RotateFacingLocationExecutor),
-                    ),
-            ),
-    )
+                )
+            )
+    );
 }
