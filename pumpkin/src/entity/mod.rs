@@ -1,3 +1,4 @@
+use crate::command::argument_types::entity_anchor::EntityAnchor;
 use crate::entity::item::ItemEntity;
 use crate::net::ClientPlatform;
 use crate::{
@@ -32,7 +33,7 @@ use pumpkin_data::{
 };
 use pumpkin_protocol::java::client::play::{CUpdateEntityPos, CUpdateEntityPosRot};
 use pumpkin_protocol::{
-    PositionFlag,
+    PositionFlag, PositionMoveRotation,
     codec::var_int::VarInt,
     java::client::play::{
         CEntityPositionSync, CEntityVelocity, CHeadRot, CPlayerPosition, CSetEntityMetadata,
@@ -754,8 +755,8 @@ impl Entity {
     }
 
     /// Changes this entity's pitch and yaw to look at target
-    pub fn look_at(&self, target: Vector3<f64>) {
-        let position = self.pos.load();
+    pub fn look_at(&self, anchor: EntityAnchor, target: Vector3<f64>) {
+        let position = anchor.position_at_entity(self);
         let delta = target.sub(&position);
         let root = delta.x.hypot(delta.z);
         let pitch = wrap_degrees((-delta.y.atan2(root) as f32).to_degrees());
@@ -1968,6 +1969,32 @@ impl Entity {
         // TODO
         self.yaw.store(yaw);
         self.set_pitch(pitch);
+    }
+
+    /// Force-sets this entity's rotation with a yaw and pitch, telling whether the yaw and/or
+    /// pitch are relative.
+    pub fn force_set_rotation(
+        &self,
+        yaw: f32,
+        is_yaw_relative: bool,
+        pitch: f32,
+        is_pitch_relative: bool,
+    ) {
+        let relatives = PositionFlag::rotation(is_yaw_relative, is_pitch_relative);
+        // TODO: handle interpolation
+        let current = PositionMoveRotation::new(
+            self.pos.load(),
+            // TODO: handle passenger movement
+            self.velocity.load(),
+            self.yaw.load(),
+            self.pitch.load(),
+        );
+        let destination = current.with_rotation(yaw, pitch);
+        let absolute_destination =
+            PositionMoveRotation::calculate_absolute(&current, &destination, &relatives);
+        self.yaw.store(absolute_destination.yaw);
+        self.head_yaw.store(absolute_destination.yaw);
+        self.pitch.store(absolute_destination.pitch);
     }
 
     pub fn set_pitch(&self, pitch: f32) {

@@ -1,13 +1,18 @@
+use crate::command::argument_types::entity_anchor::EntityAnchor;
+use crate::command::context::command_source::CommandSource;
 use crate::command::errors::command_syntax_error::CommandSyntaxError;
 use crate::command::errors::error_types::{
     CommandErrorType, READER_INVALID_DOUBLE, READER_INVALID_FLOAT, READER_INVALID_INT,
 };
 use crate::command::string_reader::StringReader;
+use crate::entity::{Entity, EntityBase};
 use pumpkin_data::translation;
 use pumpkin_util::identifier::Identifier;
 use pumpkin_util::math::bounds::{Bounds, DoubleBounds, FloatDegreeBounds, IntBounds};
+use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::text::TextComponent;
 use std::str::FromStr;
+use std::sync::Arc;
 
 /// Creates a [`Vec<String>`] of examples from
 /// the given string literals.
@@ -207,6 +212,42 @@ impl FromStringReader for Identifier {
             },
             Ok,
         )
+    }
+}
+
+/// Represents an object that can be used to make an entity look at something.
+pub enum LookAt {
+    Entity {
+        entity: Arc<dyn EntityBase>,
+        anchor: EntityAnchor,
+    },
+    Position(Vector3<f64>),
+}
+
+impl LookAt {
+    /// Makes `target` look according to this [`LookAt`] with the provided [`CommandSource`].
+    pub async fn perform(&self, source: &CommandSource, target: &Entity) {
+        match self {
+            Self::Entity { entity, anchor } => {
+                if let Some(player) = target.get_player() {
+                    player
+                        .look_at_entity(source.entity_anchor, entity.get_entity(), *anchor)
+                        .await;
+                } else {
+                    target.get_entity().look_at(
+                        source.entity_anchor,
+                        source.entity_anchor.position_at_entity(entity.get_entity()),
+                    );
+                }
+            }
+            Self::Position(pos) => {
+                if let Some(player) = target.get_player() {
+                    player.look_at_position(source.entity_anchor, *pos).await;
+                } else {
+                    target.get_entity().look_at(source.entity_anchor, *pos);
+                }
+            }
+        }
     }
 }
 

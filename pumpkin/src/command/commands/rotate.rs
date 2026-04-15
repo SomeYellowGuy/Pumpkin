@@ -1,18 +1,22 @@
-use pumpkin_data::translation;
-use pumpkin_util::math::vector3::Vector3;
-use pumpkin_util::permission::{Permission, PermissionDefault, PermissionRegistry};
-use pumpkin_util::PermissionLvl;
-use pumpkin_util::text::TextComponent;
-use crate::command::argument_builder::{argument, command, literal, ArgumentBuilder};
+use crate::command::argument_builder::{ArgumentBuilder, argument, command, literal};
+use crate::command::argument_types::LookAt;
+use crate::command::argument_types::coordinates::Coordinates;
 use crate::command::argument_types::coordinates::rotation::RotationArgumentType;
 use crate::command::argument_types::coordinates::vec3::Vec3ArgumentType;
 use crate::command::argument_types::entity::EntityArgumentType;
-use crate::command::argument_types::entity_anchor::EntityAnchorArgumentType;
+use crate::command::argument_types::entity_anchor::{EntityAnchor, EntityAnchorArgumentType};
 use crate::command::context::command_context::CommandContext;
-use crate::command::node::{CommandExecutor, CommandExecutorResult};
+use crate::command::context::command_source::CommandSource;
+use crate::command::errors::command_syntax_error::CommandSyntaxError;
 use crate::command::node::dispatcher::CommandDispatcher;
+use crate::command::node::{CommandExecutor, CommandExecutorResult};
+use crate::entity::{Entity, EntityBase};
+use pumpkin_data::translation;
+use pumpkin_util::PermissionLvl;
+use pumpkin_util::math::vector3::Axis;
+use pumpkin_util::permission::{Permission, PermissionDefault, PermissionRegistry};
+use pumpkin_util::text::TextComponent;
 
-const NAMES: [&str; 1] = ["rotate"];
 const DESCRIPTION: &str = "Changes the rotation of an entity.";
 const PERMISSION: &str = "minecraft:command.rotate";
 
@@ -22,66 +26,52 @@ const ARG_FACING_LOCATION: &str = "facingLocation";
 const ARG_FACING_ENTITY: &str = "facingEntity";
 const ARG_FACING_ANCHOR: &str = "facingAnchor";
 
-/// Calculates yaw and pitch to look from one position towards another.
-fn yaw_pitch_facing_position(
-    looking_from: &Vector3<f64>,
-    looking_towards: &Vector3<f64>,
-) -> (f32, f32) {
-    let direction_vector = looking_towards.sub(looking_from).normalize();
-
-    let yaw_radians = -direction_vector.x.atan2(direction_vector.z);
-    let pitch_radians = (-direction_vector.y).asin();
-
-    let yaw_degrees = yaw_radians.to_degrees();
-    let pitch_degrees = pitch_radians.to_degrees();
-
-    (yaw_degrees as f32, pitch_degrees as f32)
+async fn rotate_entity_at(
+    source: &CommandSource,
+    entity: &Entity,
+    rotation: Coordinates,
+) -> Result<i32, CommandSyntaxError> {
+    let rotation_vector = rotation.rotation(source);
+    let y_rotation = if rotation.is_relative(Axis::Y) {
+        rotation_vector.y - entity.yaw.load()
+    } else {
+        rotation_vector.y
+    };
+    let x_rotation = if rotation.is_relative(Axis::X) {
+        rotation_vector.x - entity.yaw.load()
+    } else {
+        rotation_vector.x
+    };
+    entity.force_set_rotation(
+        y_rotation,
+        rotation.is_relative(Axis::Y),
+        x_rotation,
+        rotation.is_relative(Axis::X),
+    );
+    send_success_message(source, entity).await;
+    Ok(1)
 }
 
-/// Rotates an entity using vanilla-style rotation logic.
-/// If relative flags are true, the values are added to current rotation.
-/// If relative flags are false, the values are absolute.
-async fn rotate_entity(
-    target: std::sync::Arc<dyn crate::entity::EntityBase>,
-    yaw: f32,
-    is_yaw_relative: bool,
-    pitch: f32,
-    is_pitch_relative: bool,
-) {
-    let entity = target.get_entity();
-
-    // Calculate final rotation values like vanilla's Entity.rotate()
-    // If relative, add to current rotation; if absolute, use directly
-    let final_yaw = if is_yaw_relative {
-        entity.yaw.load() + yaw
-    } else {
-        yaw
-    };
-
-    let final_pitch = if is_pitch_relative {
-        // Clamp pitch to valid range [-90, 90]
-        (entity.pitch.load() + pitch).clamp(-90.0, 90.0)
-    } else {
-        pitch.clamp(-90.0, 90.0)
-    };
-
-    // Use teleport with same position to update rotation
-    // This properly handles both players (sends CPlayerPosition) and other entities
-    let pos = entity.pos.load();
-    let world = entity.world.load_full();
-    target
-        .teleport(pos, Some(final_yaw), Some(final_pitch), world)
-        .await;
+async fn rotate_entity_to_look(
+    source: &CommandSource,
+    entity: &Entity,
+    look_at: LookAt,
+) -> Result<i32, CommandSyntaxError> {
+    look_at.perform(source, entity).await;
+    send_success_message(source, entity).await;
+    Ok(1)
 }
 
-/// Sends success message for the rotate command.
-async fn send_success_message(sender: &CommandSender, target: &dyn crate::entity::EntityBase) {
-    let target_name = target.get_display_name().await;
-    sender
-        .send_message(TextComponent::translate(
-            translation::COMMANDS_ROTATE_SUCCESS,
-            [target_name],
-        ))
+/// Sends a success message for the command.
+async fn send_success_message(source: &CommandSource, entity: &Entity) {
+    source
+        .send_feedback(
+            TextComponent::translate(
+                translation::COMMANDS_ROTATE_SUCCESS,
+                &[entity.get_display_name().await],
+            ),
+            true,
+        )
         .await;
 }
 
@@ -92,13 +82,8 @@ impl CommandExecutor for RotateToRotationExecutor {
     fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
             let target = EntityArgumentType::get_entity(context, ARG_TARGET).await?;
-            let (yaw, yaw_rel, pitch, pitch_rel) =
-                RotationArgumentConsumer::find_arg(args, ARG_ROTATION)?;
-
-            rotate_entity(target.clone(), yaw, yaw_rel, pitch, pitch_rel).await;
-            send_success_message(sender, target.as_ref()).await;
-
-            Ok(1)
+            let rotation = RotationArgumentType::get(context, ARG_ROTATION)?;
+            rotate_entity_at(context.source.as_ref(), target.get_entity(), rotation).await
         })
     }
 }
@@ -109,21 +94,10 @@ struct RotateFacingLocationExecutor;
 impl CommandExecutor for RotateFacingLocationExecutor {
     fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
-            let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
-            let facing_pos = Position3DArgumentConsumer::find_arg(args, ARG_FACING_LOCATION)?;
-
-            let entity = target.get_entity();
-            let eye_height = entity.get_eye_height();
-            let pos = entity.pos.load();
-            let looking_from = Vector3::new(pos.x, pos.y + eye_height, pos.z);
-
-            let (yaw, pitch) = yaw_pitch_facing_position(&looking_from, &facing_pos);
-
-            // Facing uses absolute rotation
-            rotate_entity(target.clone(), yaw, false, pitch, false).await;
-            send_success_message(sender, target.as_ref()).await;
-
-            Ok(1)
+            let target = EntityArgumentType::get_entity(context, ARG_TARGET).await?;
+            let look_at =
+                LookAt::Position(Vec3ArgumentType::get_vector3(context, ARG_FACING_LOCATION)?);
+            rotate_entity_to_look(context.source.as_ref(), target.get_entity(), look_at).await
         })
     }
 }
@@ -134,23 +108,12 @@ struct RotateFacingEntityExecutor;
 impl CommandExecutor for RotateFacingEntityExecutor {
     fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
-            let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
-            let facing_entity = EntityArgumentConsumer::find_arg(args, ARG_FACING_ENTITY)?;
-            let anchor = EntityAnchorArgumentConsumer::find_arg(args, ARG_FACING_ANCHOR)?;
-            let target_entity = target.get_entity();
-            let eye_height = target_entity.get_eye_height();
-            let pos = target_entity.pos.load();
-            let looking_from = Vector3::new(pos.x, pos.y + eye_height, pos.z);
-
-            let looking_towards = get_anchor_position(facing_entity.get_entity(), anchor);
-
-            let (yaw, pitch) = yaw_pitch_facing_position(&looking_from, &looking_towards);
-
-            // Facing uses absolute rotation
-            rotate_entity(target.clone(), yaw, false, pitch, false).await;
-            send_success_message(sender, target.as_ref()).await;
-
-            Ok(1)
+            let target = EntityArgumentType::get_entity(context, ARG_TARGET).await?;
+            let look_at = LookAt::Entity {
+                entity: EntityArgumentType::get_entity(context, ARG_FACING_ENTITY).await?,
+                anchor: EntityAnchorArgumentType::get(context, ARG_FACING_ANCHOR)?,
+            };
+            rotate_entity_to_look(context.source.as_ref(), target.get_entity(), look_at).await
         })
     }
 }
@@ -161,25 +124,12 @@ struct RotateFacingEntityNoAnchorExecutor;
 impl CommandExecutor for RotateFacingEntityNoAnchorExecutor {
     fn execute<'a>(&'a self, context: &'a CommandContext) -> CommandExecutorResult<'a> {
         Box::pin(async move {
-            let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
-            let facing_entity = EntityArgumentConsumer::find_arg(args, ARG_FACING_ENTITY)?;
-
-            let target_entity = target.get_entity();
-            let eye_height = target_entity.get_eye_height();
-            let pos = target_entity.pos.load();
-            let looking_from = Vector3::new(pos.x, pos.y + eye_height, pos.z);
-
-            // Default to feet (vanilla behavior)
-            let looking_towards =
-                get_anchor_position(facing_entity.get_entity(), EntityAnchor::Feet);
-
-            let (yaw, pitch) = yaw_pitch_facing_position(&looking_from, &looking_towards);
-
-            // Facing uses absolute rotation
-            rotate_entity(target.clone(), yaw, false, pitch, false).await;
-            send_success_message(sender, target.as_ref()).await;
-
-            Ok(1)
+            let target = EntityArgumentType::get_entity(context, ARG_TARGET).await?;
+            let look_at = LookAt::Entity {
+                entity: EntityArgumentType::get_entity(context, ARG_FACING_ENTITY).await?,
+                anchor: EntityAnchor::Feet,
+            };
+            rotate_entity_to_look(context.source.as_ref(), target.get_entity(), look_at).await
         })
     }
 }
@@ -192,10 +142,8 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &mut PermissionReg
     ));
 
     dispatcher.register(
-        command("rotate", DESCRIPTION)
-            .requires(PERMISSION)
-            .then(
-                argument(ARG_TARGET, EntityArgumentType::Entity)
+        command("rotate", DESCRIPTION).requires(PERMISSION).then(
+            argument(ARG_TARGET, EntityArgumentType::Entity)
                 .then(
                     argument(ARG_ROTATION, RotationArgumentType).executes(RotateToRotationExecutor),
                 )
@@ -215,7 +163,7 @@ pub fn register(dispatcher: &mut CommandDispatcher, registry: &mut PermissionReg
                             argument(ARG_FACING_LOCATION, Vec3ArgumentType::Default)
                                 .executes(RotateFacingLocationExecutor),
                         ),
-                )
-            )
+                ),
+        ),
     );
 }

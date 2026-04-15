@@ -618,6 +618,59 @@ impl<T: Math + Copy + Into<f64>> Vector3<T> {
     }
 }
 
+impl<T: Math + Copy + Into<f64>> Vector3<T> {
+    /// Rotates this vector by some X rotation.
+    ///
+    /// # Arguments
+    /// - `angle` – The amount to rotate by, in radians.
+    ///
+    /// # Returns
+    /// The newly rotated vector.
+    pub fn rotate_x(&self, angle: f32) -> Vector3<f64> {
+        let cos = angle.cos() as f64;
+        let sin = angle.sin() as f64;
+        Vector3::new(
+            self.x.into(),
+            self.y.into() * cos + self.z.into() * sin,
+            self.z.into() * cos - self.y.into() * sin,
+        )
+    }
+
+    /// Rotates this vector by some Y rotation.
+    ///
+    /// # Arguments
+    /// - `angle` – The amount to rotate by, in radians.
+    ///
+    /// # Returns
+    /// The newly rotated vector.
+    pub fn rotate_y(&self, angle: f32) -> Vector3<f64> {
+        let cos = angle.cos() as f64;
+        let sin = angle.sin() as f64;
+        Vector3::new(
+            self.x.into() * cos + self.z.into() * sin,
+            self.y.into(),
+            self.z.into() * cos - self.x.into() * sin,
+        )
+    }
+
+    /// Rotates this vector by some Z rotation.
+    ///
+    /// # Arguments
+    /// - `angle` – The amount to rotate by, in radians.
+    ///
+    /// # Returns
+    /// The newly rotated vector.
+    pub fn rotate_z(&self, angle: f32) -> Vector3<f64> {
+        let cos = angle.cos() as f64;
+        let sin = angle.sin() as f64;
+        Vector3::new(
+            self.x.into() * cos + self.y.into() * sin,
+            self.y.into() * cos - self.x.into() * sin,
+            self.z.into(),
+        )
+    }
+}
+
 /// A trait representing basic mathematical operations required for vector components.
 pub trait Math:
     Mul<Output = Self>

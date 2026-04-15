@@ -5,10 +5,12 @@ use std::{
     task::{Context, Poll},
 };
 
+use crate::packet::{MultiVersionJavaPacket, Packet};
 use aes::cipher::BlockSizeUser;
 use bytes::Bytes;
 use codec::var_int::VarInt;
 use hybrid_array::{Array, sizes::U1};
+use pumpkin_util::math::vector3::Vector3;
 use pumpkin_util::{
     resource_location::ResourceLocation,
     text::{TextComponent, style::Style},
@@ -21,8 +23,6 @@ use serde::{
 };
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-
-use crate::packet::{MultiVersionJavaPacket, Packet};
 
 pub mod bedrock;
 pub mod codec;
@@ -468,6 +468,132 @@ impl PositionFlag {
     #[must_use]
     pub fn get_bitfield(flags: &[Self]) -> i32 {
         flags.iter().fold(0, |acc, flag| acc | flag.get_mask())
+    }
+
+    #[must_use]
+    pub fn rotation(is_yaw_relative: bool, is_pitch_relative: bool) -> Vec<Self> {
+        let mut flags = Vec::new();
+        if is_yaw_relative {
+            flags.push(Self::YRot);
+        }
+        if is_pitch_relative {
+            flags.push(Self::XRot);
+        }
+        flags
+    }
+}
+
+/// Handles rotation and position of an entity.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct PositionMoveRotation {
+    pub position: Vector3<f64>,
+    pub delta: Vector3<f64>,
+    pub yaw: f32,
+    pub pitch: f32,
+}
+
+impl PositionMoveRotation {
+    #[must_use]
+    pub const fn new(position: Vector3<f64>, delta: Vector3<f64>, yaw: f32, pitch: f32) -> Self {
+        Self {
+            position,
+            delta,
+            yaw,
+            pitch,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_rotation(&self, yaw: f32, pitch: f32) -> Self {
+        Self {
+            position: self.position,
+            delta: self.delta,
+            yaw,
+            pitch,
+        }
+    }
+
+    #[must_use]
+    pub fn calculate_absolute(
+        source: &Self,
+        change: &Self,
+        relatives: &[PositionFlag],
+    ) -> Self {
+        let offset = Vector3::new(
+            if relatives.contains(&PositionFlag::X) {
+                source.position.x
+            } else {
+                0.0
+            },
+            if relatives.contains(&PositionFlag::Y) {
+                source.position.y
+            } else {
+                0.0
+            },
+            if relatives.contains(&PositionFlag::Z) {
+                source.position.z
+            } else {
+                0.0
+            },
+        );
+        let yaw_offset = if relatives.contains(&PositionFlag::YRot) {
+            source.yaw
+        } else {
+            0.0
+        };
+        let pitch_offset = if relatives.contains(&PositionFlag::XRot) {
+            source.pitch
+        } else {
+            0.0
+        };
+        let absolute_pos = offset + change.position;
+        let absolute_yaw = yaw_offset + change.yaw;
+        let absolute_pitch = pitch_offset + change.pitch;
+        let mut rotated_movement = source.delta;
+        if relatives.contains(&PositionFlag::RotateDelta) {
+            rotated_movement = rotated_movement.rotate_x((source.yaw - absolute_yaw).to_radians());
+            rotated_movement =
+                rotated_movement.rotate_y((source.pitch - absolute_pitch).to_radians());
+        }
+        let absolute_delta_movement = Vector3::new(
+            Self::calculate_delta(
+                rotated_movement.x,
+                change.delta.x,
+                relatives,
+                &PositionFlag::DeltaX,
+            ),
+            Self::calculate_delta(
+                rotated_movement.x,
+                change.delta.x,
+                relatives,
+                &PositionFlag::DeltaY,
+            ),
+            Self::calculate_delta(
+                rotated_movement.x,
+                change.delta.x,
+                relatives,
+                &PositionFlag::DeltaZ,
+            ),
+        );
+        Self {
+            position: absolute_pos,
+            delta: absolute_delta_movement,
+            yaw: absolute_yaw,
+            pitch: absolute_pitch,
+        }
+    }
+
+    fn calculate_delta(
+        current_delta: f64,
+        delta_change: f64,
+        relatives: &[PositionFlag],
+        relative: &PositionFlag,
+    ) -> f64 {
+        if relatives.contains(relative) {
+            current_delta + delta_change
+        } else {
+            delta_change
+        }
     }
 }
 

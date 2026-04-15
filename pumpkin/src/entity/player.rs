@@ -57,8 +57,8 @@ use pumpkin_protocol::java::client::play::{
     Animation, CAcknowledgeBlockChange, CActionBar, CChangeDifficulty, CChunkBatchEnd,
     CChunkBatchStart, CChunkData, CCloseContainer, CCombatDeath, CCustomPayload,
     CDisguisedChatMessage, CEntityAnimation, CEntityPositionSync, CGameEvent, CKeepAlive,
-    COpenScreen, CParticle, CPlayerAbilities, CPlayerInfoUpdate, CPlayerPosition,
-    CPlayerSpawnPosition, CRespawn, CSetContainerContent, CSetContainerProperty, CSetContainerSlot,
+    COpenScreen, CParticle, CPlayerAbilities, CPlayerInfoUpdate, CPlayerLookAt, CPlayerPosition,
+    CPlayerRotation, CPlayerSpawnPosition, CRespawn, CSetContainerContent, CSetContainerProperty, CSetContainerSlot,
     CSetCursorItem, CSetEquipment, CSetExperience, CSetHealth, CSetPlayerInventory,
     CSetSelectedSlot, CSoundEffect, CStopSound, CSubtitle, CSystemChatMessage, CTabList,
     CTitleAnimation, CTitleText, CUnloadChunk, CUpdateMobEffect, CUpdateTime, GameEvent, Metadata,
@@ -102,8 +102,10 @@ use super::hunger::HungerManager;
 use super::item::ItemEntity;
 use super::living::LivingEntity;
 use super::{Entity, EntityBase, NBTStorage, NBTStorageInit};
+use crate::command::argument_types::entity_anchor::EntityAnchor;
 use pumpkin_data::potion::Effect;
 use pumpkin_world::chunk_system::ChunkLoading;
+
 const MAX_CACHED_SIGNATURES: u8 = 128; // Vanilla: 128
 const MAX_PREVIOUS_MESSAGES: u8 = 20; // Vanilla: 20
 
@@ -3422,6 +3424,53 @@ impl Player {
         CommandSender::Player(self.clone())
             .into_source(server)
             .await
+    }
+
+    /// Makes a player look at a position, sending a packet to tell the player's
+    /// client to update their rotation.
+    pub async fn look_at_position(&self, anchor: EntityAnchor, pos: Vector3<f64>) {
+        self.get_entity().look_at(anchor, pos);
+        self.client
+            .enqueue_packet(&CPlayerLookAt::position(anchor.into(), pos))
+            .await;
+    }
+
+    /// Makes a player look at an entity, sending a packet to tell the player's
+    /// client to update their rotation.
+    pub async fn look_at_entity(
+        &self,
+        from_anchor: EntityAnchor,
+        entity: &Entity,
+        to_anchor: EntityAnchor,
+    ) {
+        let pos = to_anchor.position_at_entity(entity);
+        self.get_entity().look_at(from_anchor, pos);
+        self.client
+            .enqueue_packet(&CPlayerLookAt::entity(
+                from_anchor.into(),
+                entity.get_entity().entity_id,
+                to_anchor.into(),
+                to_anchor.position_at_entity(entity),
+            ))
+            .await;
+    }
+
+    /// Sends a packet to update a player's rotation.
+    pub async fn send_rotation(
+        &self,
+        yaw: f32,
+        is_yaw_relative: bool,
+        pitch: f32,
+        is_pitch_relative: bool,
+    ) {
+        self.client
+            .enqueue_packet(&CPlayerRotation::new(
+                yaw,
+                is_yaw_relative,
+                pitch,
+                is_pitch_relative,
+            ))
+            .await;
     }
 }
 

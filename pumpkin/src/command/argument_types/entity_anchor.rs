@@ -87,3 +87,12 @@ impl EntityAnchor {
             .map_or_else(|| pos, |e| self.position_at_entity(e.get_entity()))
     }
 }
+
+impl From<EntityAnchor> for u8 {
+    fn from(value: EntityAnchor) -> Self {
+        match value {
+            EntityAnchor::Feet => 0,
+            EntityAnchor::Eyes => 1
+        }
+    }
+}
