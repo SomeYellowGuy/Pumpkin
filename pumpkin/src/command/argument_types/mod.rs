@@ -5,7 +5,7 @@ use crate::command::errors::error_types::{
     CommandErrorType, READER_INVALID_DOUBLE, READER_INVALID_FLOAT, READER_INVALID_INT,
 };
 use crate::command::string_reader::StringReader;
-use crate::entity::{Entity, EntityBase};
+use crate::entity::EntityBase;
 use pumpkin_data::translation;
 use pumpkin_util::identifier::Identifier;
 use pumpkin_util::math::bounds::{Bounds, DoubleBounds, FloatDegreeBounds, IntBounds};
@@ -226,7 +226,7 @@ pub enum LookAt {
 
 impl LookAt {
     /// Makes `target` look according to this [`LookAt`] with the provided [`CommandSource`].
-    pub async fn perform(&self, source: &CommandSource, target: &Entity) {
+    pub async fn perform(&self, source: &CommandSource, target: &dyn EntityBase) {
         match self {
             Self::Entity { entity, anchor } => {
                 if let Some(player) = target.get_player() {

@@ -130,6 +130,8 @@ impl CommandSource {
     }
 
     /// Creates a usable [`CommandSource`] for running commands in an actual environment.
+    ///
+    /// **Note**: `rotation` expects a [`Vector2`] that goes in the order (`pitch`, `yaw`).
     #[expect(clippy::too_many_arguments)]
     pub fn new(
         output: CommandSender,

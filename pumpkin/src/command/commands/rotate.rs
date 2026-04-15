@@ -10,12 +10,13 @@ use crate::command::context::command_source::CommandSource;
 use crate::command::errors::command_syntax_error::CommandSyntaxError;
 use crate::command::node::dispatcher::CommandDispatcher;
 use crate::command::node::{CommandExecutor, CommandExecutorResult};
-use crate::entity::{Entity, EntityBase};
+use crate::entity::EntityBase;
 use pumpkin_data::translation;
 use pumpkin_util::PermissionLvl;
 use pumpkin_util::math::vector3::Axis;
 use pumpkin_util::permission::{Permission, PermissionDefault, PermissionRegistry};
 use pumpkin_util::text::TextComponent;
+use std::sync::Arc;
 
 const DESCRIPTION: &str = "Changes the rotation of an entity.";
 const PERMISSION: &str = "minecraft:command.rotate";
@@ -28,17 +29,18 @@ const ARG_FACING_ANCHOR: &str = "facingAnchor";
 
 async fn rotate_entity_at(
     source: &CommandSource,
-    entity: &Entity,
+    entity: &Arc<dyn EntityBase>,
     rotation: Coordinates,
 ) -> Result<i32, CommandSyntaxError> {
     let rotation_vector = rotation.rotation(source);
+    let entity_struct = entity.get_entity();
     let y_rotation = if rotation.is_relative(Axis::Y) {
-        rotation_vector.y - entity.yaw.load()
+        rotation_vector.y - entity_struct.yaw.load()
     } else {
         rotation_vector.y
     };
     let x_rotation = if rotation.is_relative(Axis::X) {
-        rotation_vector.x - entity.yaw.load()
+        rotation_vector.x - entity_struct.pitch.load()
     } else {
         rotation_vector.x
     };
@@ -46,13 +48,13 @@ async fn rotate_entity_at(
         y_rotation,
         rotation.is_relative(Axis::Y),
         x_rotation,
-        rotation.is_relative(Axis::X)
+        rotation.is_relative(Axis::X),
     );
-    entity.force_set_rotation(
-        yaw, is_yaw_relative, pitch, is_pitch_relative
-    );
+    entity_struct.force_set_rotation(yaw, is_yaw_relative, pitch, is_pitch_relative);
     if let Some(player) = entity.get_player() {
-        player.send_rotation(yaw, is_yaw_relative, pitch, is_pitch_relative).await;
+        player
+            .send_rotation(yaw, is_yaw_relative, pitch, is_pitch_relative)
+            .await;
     }
     send_success_message(source, entity).await;
     Ok(1)
@@ -60,16 +62,16 @@ async fn rotate_entity_at(
 
 async fn rotate_entity_to_look(
     source: &CommandSource,
-    entity: &Entity,
+    entity: &Arc<dyn EntityBase>,
     look_at: LookAt,
 ) -> Result<i32, CommandSyntaxError> {
-    look_at.perform(source, entity).await;
+    look_at.perform(source, entity.as_ref()).await;
     send_success_message(source, entity).await;
     Ok(1)
 }
 
 /// Sends a success message for the command.
-async fn send_success_message(source: &CommandSource, entity: &Entity) {
+async fn send_success_message(source: &CommandSource, entity: &Arc<dyn EntityBase>) {
     source
         .send_feedback(
             TextComponent::translate(
@@ -89,7 +91,7 @@ impl CommandExecutor for RotateToRotationExecutor {
         Box::pin(async move {
             let target = EntityArgumentType::get_entity(context, ARG_TARGET).await?;
             let rotation = RotationArgumentType::get(context, ARG_ROTATION)?;
-            rotate_entity_at(context.source.as_ref(), target.get_entity(), rotation).await
+            rotate_entity_at(context.source.as_ref(), &target, rotation).await
         })
     }
 }
@@ -103,7 +105,7 @@ impl CommandExecutor for RotateFacingLocationExecutor {
             let target = EntityArgumentType::get_entity(context, ARG_TARGET).await?;
             let look_at =
                 LookAt::Position(Vec3ArgumentType::get_vector3(context, ARG_FACING_LOCATION)?);
-            rotate_entity_to_look(context.source.as_ref(), target.get_entity(), look_at).await
+            rotate_entity_to_look(context.source.as_ref(), &target, look_at).await
         })
     }
 }
@@ -119,7 +121,7 @@ impl CommandExecutor for RotateFacingEntityExecutor {
                 entity: EntityArgumentType::get_entity(context, ARG_FACING_ENTITY).await?,
                 anchor: EntityAnchorArgumentType::get(context, ARG_FACING_ANCHOR)?,
             };
-            rotate_entity_to_look(context.source.as_ref(), target.get_entity(), look_at).await
+            rotate_entity_to_look(context.source.as_ref(), &target, look_at).await
         })
     }
 }
@@ -135,7 +137,7 @@ impl CommandExecutor for RotateFacingEntityNoAnchorExecutor {
                 entity: EntityArgumentType::get_entity(context, ARG_FACING_ENTITY).await?,
                 anchor: EntityAnchor::Feet,
             };
-            rotate_entity_to_look(context.source.as_ref(), target.get_entity(), look_at).await
+            rotate_entity_to_look(context.source.as_ref(), &target, look_at).await
         })
     }
 }

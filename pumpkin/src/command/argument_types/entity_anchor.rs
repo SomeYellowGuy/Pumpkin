@@ -92,7 +92,7 @@ impl From<EntityAnchor> for u8 {
     fn from(value: EntityAnchor) -> Self {
         match value {
             EntityAnchor::Feet => 0,
-            EntityAnchor::Eyes => 1
+            EntityAnchor::Eyes => 1,
         }
     }
 }

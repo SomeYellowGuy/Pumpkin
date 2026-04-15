@@ -514,11 +514,7 @@ impl PositionMoveRotation {
     }
 
     #[must_use]
-    pub fn calculate_absolute(
-        source: &Self,
-        change: &Self,
-        relatives: &[PositionFlag],
-    ) -> Self {
+    pub fn calculate_absolute(source: &Self, change: &Self, relatives: &[PositionFlag]) -> Self {
         let offset = Vector3::new(
             if relatives.contains(&PositionFlag::X) {
                 source.position.x

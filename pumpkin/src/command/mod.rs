@@ -287,16 +287,19 @@ impl CommandSender {
                     server.clone(),
                 )
             }
-            Self::Player(player) => CommandSource::new(
-                Self::Player(player.clone()),
-                player.world(),
-                Some(player.clone()),
-                player.position(),
-                player.rotation().into(),
-                player.get_display_name().await.get_text(),
-                player.get_display_name().await,
-                server.clone(),
-            ),
+            Self::Player(player) => {
+                let returned_rotation = player.rotation();
+                CommandSource::new(
+                    Self::Player(player.clone()),
+                    player.world(),
+                    Some(player.clone()),
+                    player.position(),
+                    Vector2::new(returned_rotation.1, returned_rotation.0),
+                    player.get_display_name().await.get_text(),
+                    player.get_display_name().await,
+                    server.clone(),
+                )
+            }
             Self::CommandBlock(command_entity, world) => {
                 let pos = command_entity.position;
 
