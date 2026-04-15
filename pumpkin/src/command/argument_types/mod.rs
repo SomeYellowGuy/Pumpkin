@@ -229,23 +229,12 @@ impl LookAt {
     pub async fn perform(&self, source: &CommandSource, target: &dyn EntityBase) {
         match self {
             Self::Entity { entity, anchor } => {
-                if let Some(player) = target.get_player() {
-                    player
-                        .look_at_entity(source.entity_anchor, entity.get_entity(), *anchor)
-                        .await;
-                } else {
-                    target.get_entity().look_at(
-                        source.entity_anchor,
-                        source.entity_anchor.position_at_entity(entity.get_entity()),
-                    );
-                }
+                target
+                    .look_at_entity(source.entity_anchor, entity.get_entity(), *anchor)
+                    .await;
             }
             Self::Position(pos) => {
-                if let Some(player) = target.get_player() {
-                    player.look_at_position(source.entity_anchor, *pos).await;
-                } else {
-                    target.get_entity().look_at(source.entity_anchor, *pos);
-                }
+                target.look_at_position(source.entity_anchor, *pos).await;
             }
         }
     }

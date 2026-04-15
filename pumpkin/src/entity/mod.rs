@@ -363,6 +363,48 @@ pub trait EntityBase: Send + Sync + NBTStorage + std::any::Any {
 
     /// Returns itself as the nbt storage for saving and loading data.
     fn as_nbt_storage(&self) -> &dyn NBTStorage;
+
+    /// Force-sets this entity's rotation with a yaw and pitch, telling whether the yaw and/or pitch are relative.
+    fn force_set_rotation(
+        &self,
+        yaw: f32,
+        is_yaw_relative: bool,
+        pitch: f32,
+        is_pitch_relative: bool,
+    ) -> EntityBaseFuture<'_, ()> {
+        Box::pin(async move {
+            self.get_entity()
+                .force_set_rotation(yaw, is_yaw_relative, pitch, is_pitch_relative);
+        })
+    }
+
+    /// Makes this entity look at a position.
+    fn look_at_position(
+        &self,
+        anchor: EntityAnchor,
+        pos: Vector3<f64>,
+    ) -> EntityBaseFuture<'_, ()> {
+        Box::pin(async move {
+            self.get_entity().look_at(anchor, pos);
+        })
+    }
+
+    /// Makes this entity look at the provided `entity` with the provided anchors:
+    /// - `from_anchor` for the anchor of the looking entity to aim from.
+    /// - `to_anchor` for the anchor of the target entity to look at.
+    fn look_at_entity<'a>(
+        &'a self,
+        from_anchor: EntityAnchor,
+        entity: &'a Entity,
+        to_anchor: EntityAnchor,
+    ) -> EntityBaseFuture<'a, ()> {
+        Box::pin(async move {
+            entity.get_entity().look_at(
+                from_anchor,
+                to_anchor.position_at_entity(entity.get_entity()),
+            );
+        })
+    }
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -754,7 +796,7 @@ impl Entity {
         Vector3::new(sin_yaw * cos_pitch, -sin_pitch, cos_yaw * cos_pitch)
     }
 
-    /// Changes this entity's pitch and yaw to look at target
+    /// Changes this entity's pitch and yaw to look at a target position with the provided anchor to aim from.
     pub fn look_at(&self, anchor: EntityAnchor, target: Vector3<f64>) {
         let position = anchor.position_at_entity(self);
         let delta = target.sub(&position);
@@ -1971,8 +2013,7 @@ impl Entity {
         self.set_pitch(pitch);
     }
 
-    /// Force-sets this entity's rotation with a yaw and pitch, telling whether the yaw and/or
-    /// pitch are relative.
+    /// Force-sets this entity's rotation with a yaw and pitch, telling whether the yaw and/or pitch are relative.
     pub fn force_set_rotation(
         &self,
         yaw: f32,

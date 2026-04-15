@@ -3425,53 +3425,6 @@ impl Player {
             .into_source(server)
             .await
     }
-
-    /// Makes a player look at a position, sending a packet to tell the player's
-    /// client to update their rotation.
-    pub async fn look_at_position(&self, anchor: EntityAnchor, pos: Vector3<f64>) {
-        self.get_entity().look_at(anchor, pos);
-        self.client
-            .enqueue_packet(&CPlayerLookAt::position(anchor.into(), pos))
-            .await;
-    }
-
-    /// Makes a player look at an entity, sending a packet to tell the player's
-    /// client to update their rotation.
-    pub async fn look_at_entity(
-        &self,
-        from_anchor: EntityAnchor,
-        entity: &Entity,
-        to_anchor: EntityAnchor,
-    ) {
-        let pos = to_anchor.position_at_entity(entity);
-        self.get_entity().look_at(from_anchor, pos);
-        self.client
-            .enqueue_packet(&CPlayerLookAt::entity(
-                from_anchor.into(),
-                entity.get_entity().entity_id,
-                to_anchor.into(),
-                to_anchor.position_at_entity(entity),
-            ))
-            .await;
-    }
-
-    /// Sends a packet to update a player's rotation.
-    pub async fn send_rotation(
-        &self,
-        yaw: f32,
-        is_yaw_relative: bool,
-        pitch: f32,
-        is_pitch_relative: bool,
-    ) {
-        self.client
-            .enqueue_packet(&CPlayerRotation::new(
-                yaw,
-                is_yaw_relative,
-                pitch,
-                is_pitch_relative,
-            ))
-            .await;
-    }
 }
 
 impl PartialEq for Player {
@@ -3823,6 +3776,61 @@ impl EntityBase for Player {
     fn tick_in_void<'a>(&'a self, dyn_self: &'a dyn EntityBase) -> EntityBaseFuture<'a, ()> {
         Box::pin(async move {
             self.living_entity.tick_in_void(dyn_self).await;
+        })
+    }
+
+    fn force_set_rotation(
+        &self,
+        yaw: f32,
+        is_yaw_relative: bool,
+        pitch: f32,
+        is_pitch_relative: bool,
+    ) -> EntityBaseFuture<'_, ()> {
+        Box::pin(async move {
+            self.get_entity()
+                .force_set_rotation(yaw, is_yaw_relative, pitch, is_pitch_relative);
+            // Send a rotation packet to update the player's client.
+            self.client
+                .enqueue_packet(&CPlayerRotation::new(
+                    yaw,
+                    is_yaw_relative,
+                    pitch,
+                    is_pitch_relative,
+                ))
+                .await;
+        })
+    }
+
+    fn look_at_position(
+        &self,
+        anchor: EntityAnchor,
+        pos: Vector3<f64>,
+    ) -> EntityBaseFuture<'_, ()> {
+        Box::pin(async move {
+            self.get_entity().look_at(anchor, pos);
+            self.client
+                .enqueue_packet(&CPlayerLookAt::position(anchor.into(), pos))
+                .await;
+        })
+    }
+
+    fn look_at_entity<'a>(
+        &'a self,
+        from_anchor: EntityAnchor,
+        entity: &'a Entity,
+        to_anchor: EntityAnchor,
+    ) -> EntityBaseFuture<'a, ()> {
+        Box::pin(async move {
+            self.get_entity()
+                .look_at(from_anchor, to_anchor.position_at_entity(entity));
+            self.client
+                .enqueue_packet(&CPlayerLookAt::entity(
+                    from_anchor.into(),
+                    entity.get_entity().entity_id,
+                    to_anchor.into(),
+                    to_anchor.position_at_entity(entity),
+                ))
+                .await;
         })
     }
 }

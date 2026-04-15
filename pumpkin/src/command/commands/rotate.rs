@@ -50,12 +50,9 @@ async fn rotate_entity_at(
         x_rotation,
         rotation.is_relative(Axis::X),
     );
-    entity_struct.force_set_rotation(yaw, is_yaw_relative, pitch, is_pitch_relative);
-    if let Some(player) = entity.get_player() {
-        player
-            .send_rotation(yaw, is_yaw_relative, pitch, is_pitch_relative)
-            .await;
-    }
+    entity
+        .force_set_rotation(yaw, is_yaw_relative, pitch, is_pitch_relative)
+        .await;
     send_success_message(source, entity).await;
     Ok(1)
 }
