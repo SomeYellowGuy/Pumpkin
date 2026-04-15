@@ -42,12 +42,18 @@ async fn rotate_entity_at(
     } else {
         rotation_vector.x
     };
-    entity.force_set_rotation(
+    let (yaw, is_yaw_relative, pitch, is_pitch_relative) = (
         y_rotation,
         rotation.is_relative(Axis::Y),
         x_rotation,
-        rotation.is_relative(Axis::X),
+        rotation.is_relative(Axis::X)
     );
+    entity.force_set_rotation(
+        yaw, is_yaw_relative, pitch, is_pitch_relative
+    );
+    if let Some(player) = entity.get_player() {
+        player.send_rotation(yaw, is_yaw_relative, pitch, is_pitch_relative).await;
+    }
     send_success_message(source, entity).await;
     Ok(1)
 }
