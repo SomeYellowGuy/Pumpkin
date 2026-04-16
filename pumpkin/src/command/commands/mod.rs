@@ -110,7 +110,6 @@ pub async fn default_dispatcher(
     dispatcher.register(bossbar::init_command_tree(), "minecraft:command.bossbar");
     dispatcher.register(say::init_command_tree(), "minecraft:command.say");
     dispatcher.register(gamemode::init_command_tree(), "minecraft:command.gamemode");
-    dispatcher.register(gamerule::init_command_tree(), "minecraft:command.gamerule");
     dispatcher.register(
         stopsound::init_command_tree(),
         "minecraft:command.stopsound",
@@ -152,6 +151,7 @@ pub async fn default_dispatcher(
     };
 
     difficulty::register(&mut dispatcher, registry);
+    gamerule::register(&mut dispatcher, registry);
     help::register(&mut dispatcher, registry);
     kill::register(&mut dispatcher, registry);
     list::register(&mut dispatcher, registry);
@@ -346,13 +346,6 @@ fn register_level_2_permissions(registry: &mut PermissionRegistry) {
     registry
         .register_permission(Permission::new(
             "minecraft:command.gamemode",
-            "Sets a player's game mode",
-            PermissionDefault::Op(PermissionLvl::Two),
-        ))
-        .unwrap();
-    registry
-        .register_permission(Permission::new(
-            "minecraft:command.gamerule",
             "Sets a player's game mode",
             PermissionDefault::Op(PermissionLvl::Two),
         ))
