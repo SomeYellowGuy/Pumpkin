@@ -2035,7 +2035,7 @@ impl Entity {
             PositionMoveRotation::calculate_absolute(&current, &destination, &relatives);
         self.yaw.store(absolute_destination.yaw);
         self.head_yaw.store(absolute_destination.yaw);
-        self.pitch.store(absolute_destination.pitch);
+        self.set_pitch(absolute_destination.pitch);
     }
 
     pub fn set_pitch(&self, pitch: f32) {
