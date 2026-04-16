@@ -127,6 +127,23 @@ impl GameRule {
             Self::WaterSourceConversion,
         ]
     }
+    pub const fn bounds(&self) -> Option<(i32, i32)> {
+        match self {
+            Self::FireSpreadRadiusAroundPlayer => Some((-1i32, 2147483647i32)),
+            Self::MaxBlockModifications => Some((1i32, 2147483647i32)),
+            Self::MaxCommandForks => Some((0i32, 2147483647i32)),
+            Self::MaxCommandSequenceLength => Some((0i32, 2147483647i32)),
+            Self::MaxEntityCramming => Some((0i32, 2147483647i32)),
+            Self::MaxMinecartSpeed => Some((1i32, 1000i32)),
+            Self::MaxSnowAccumulationHeight => Some((0i32, 8i32)),
+            Self::PlayersNetherPortalCreativeDelay => Some((0i32, 2147483647i32)),
+            Self::PlayersNetherPortalDefaultDelay => Some((0i32, 2147483647i32)),
+            Self::PlayersSleepingPercentage => Some((0i32, 2147483647i32)),
+            Self::RandomTickSpeed => Some((0i32, 2147483647i32)),
+            Self::RespawnRadius => Some((0i32, 2147483647i32)),
+            _ => None,
+        }
+    }
 }
 impl fmt::Display for GameRule {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -256,7 +273,7 @@ pub struct GameRuleRegistry {
     #[serde(rename = "fire_spread_radius_around_player")]
     #[serde(default = "default_fire_spread_radius_around_player")]
     #[serde(with = "as_string")]
-    pub fire_spread_radius_around_player: i64,
+    pub fire_spread_radius_around_player: i32,
     #[serde(rename = "forgive_dead_players")]
     #[serde(default = "default_forgive_dead_players")]
     #[serde(with = "as_string")]
@@ -296,27 +313,27 @@ pub struct GameRuleRegistry {
     #[serde(rename = "max_block_modifications")]
     #[serde(default = "default_max_block_modifications")]
     #[serde(with = "as_string")]
-    pub max_block_modifications: i64,
+    pub max_block_modifications: i32,
     #[serde(rename = "max_command_forks")]
     #[serde(default = "default_max_command_forks")]
     #[serde(with = "as_string")]
-    pub max_command_forks: i64,
+    pub max_command_forks: i32,
     #[serde(rename = "max_command_sequence_length")]
     #[serde(default = "default_max_command_sequence_length")]
     #[serde(with = "as_string")]
-    pub max_command_sequence_length: i64,
+    pub max_command_sequence_length: i32,
     #[serde(rename = "max_entity_cramming")]
     #[serde(default = "default_max_entity_cramming")]
     #[serde(with = "as_string")]
-    pub max_entity_cramming: i64,
+    pub max_entity_cramming: i32,
     #[serde(rename = "max_minecart_speed")]
     #[serde(default = "default_max_minecart_speed")]
     #[serde(with = "as_string")]
-    pub max_minecart_speed: i64,
+    pub max_minecart_speed: i32,
     #[serde(rename = "max_snow_accumulation_height")]
     #[serde(default = "default_max_snow_accumulation_height")]
     #[serde(with = "as_string")]
-    pub max_snow_accumulation_height: i64,
+    pub max_snow_accumulation_height: i32,
     #[serde(rename = "mob_drops")]
     #[serde(default = "default_mob_drops")]
     #[serde(with = "as_string")]
@@ -340,15 +357,15 @@ pub struct GameRuleRegistry {
     #[serde(rename = "players_nether_portal_creative_delay")]
     #[serde(default = "default_players_nether_portal_creative_delay")]
     #[serde(with = "as_string")]
-    pub players_nether_portal_creative_delay: i64,
+    pub players_nether_portal_creative_delay: i32,
     #[serde(rename = "players_nether_portal_default_delay")]
     #[serde(default = "default_players_nether_portal_default_delay")]
     #[serde(with = "as_string")]
-    pub players_nether_portal_default_delay: i64,
+    pub players_nether_portal_default_delay: i32,
     #[serde(rename = "players_sleeping_percentage")]
     #[serde(default = "default_players_sleeping_percentage")]
     #[serde(with = "as_string")]
-    pub players_sleeping_percentage: i64,
+    pub players_sleeping_percentage: i32,
     #[serde(rename = "projectiles_can_break_blocks")]
     #[serde(default = "default_projectiles_can_break_blocks")]
     #[serde(with = "as_string")]
@@ -364,7 +381,7 @@ pub struct GameRuleRegistry {
     #[serde(rename = "random_tick_speed")]
     #[serde(default = "default_random_tick_speed")]
     #[serde(with = "as_string")]
-    pub random_tick_speed: i64,
+    pub random_tick_speed: i32,
     #[serde(rename = "reduced_debug_info")]
     #[serde(default = "default_reduced_debug_info")]
     #[serde(with = "as_string")]
@@ -372,7 +389,7 @@ pub struct GameRuleRegistry {
     #[serde(rename = "respawn_radius")]
     #[serde(default = "default_respawn_radius")]
     #[serde(with = "as_string")]
-    pub respawn_radius: i64,
+    pub respawn_radius: i32,
     #[serde(rename = "send_command_feedback")]
     #[serde(default = "default_send_command_feedback")]
     #[serde(with = "as_string")]
@@ -451,7 +468,7 @@ impl<I: fmt::Display, B: fmt::Display> fmt::Display for GameRuleValue<I, B> {
     }
 }
 impl GameRuleRegistry {
-    pub fn get(&self, rule: &GameRule) -> GameRuleValue<&i64, &bool> {
+    pub fn get(&self, rule: &GameRule) -> GameRuleValue<&i32, &bool> {
         match rule {
             GameRule::AdvanceTime => GameRuleValue::Bool(&self.advance_time),
             GameRule::AdvanceWeather => GameRuleValue::Bool(&self.advance_weather),
@@ -540,7 +557,7 @@ impl GameRuleRegistry {
             GameRule::WaterSourceConversion => GameRuleValue::Bool(&self.water_source_conversion),
         }
     }
-    pub fn get_mut(&mut self, rule: &GameRule) -> GameRuleValue<&mut i64, &mut bool> {
+    pub fn get_mut(&mut self, rule: &GameRule) -> GameRuleValue<&mut i32, &mut bool> {
         match rule {
             GameRule::AdvanceTime => GameRuleValue::Bool(&mut self.advance_time),
             GameRule::AdvanceWeather => GameRuleValue::Bool(&mut self.advance_weather),
@@ -656,7 +673,7 @@ impl Default for GameRuleRegistry {
             entity_drops: true,
             fall_damage: true,
             fire_damage: true,
-            fire_spread_radius_around_player: 128i64,
+            fire_spread_radius_around_player: 128i32,
             forgive_dead_players: true,
             freeze_damage: true,
             global_sound_events: true,
@@ -666,26 +683,26 @@ impl Default for GameRuleRegistry {
             limited_crafting: false,
             locator_bar: true,
             log_admin_commands: true,
-            max_block_modifications: 32768i64,
-            max_command_forks: 65536i64,
-            max_command_sequence_length: 65536i64,
-            max_entity_cramming: 24i64,
-            max_minecart_speed: 8i64,
-            max_snow_accumulation_height: 1i64,
+            max_block_modifications: 32768i32,
+            max_command_forks: 65536i32,
+            max_command_sequence_length: 65536i32,
+            max_entity_cramming: 24i32,
+            max_minecart_speed: 8i32,
+            max_snow_accumulation_height: 1i32,
             mob_drops: true,
             mob_explosion_drop_decay: true,
             mob_griefing: true,
             natural_health_regeneration: true,
             player_movement_check: true,
-            players_nether_portal_creative_delay: 0i64,
-            players_nether_portal_default_delay: 80i64,
-            players_sleeping_percentage: 100i64,
+            players_nether_portal_creative_delay: 0i32,
+            players_nether_portal_default_delay: 80i32,
+            players_sleeping_percentage: 100i32,
             projectiles_can_break_blocks: true,
             pvp: true,
             raids: true,
-            random_tick_speed: 3i64,
+            random_tick_speed: 3i32,
             reduced_debug_info: false,
-            respawn_radius: 10i64,
+            respawn_radius: 10i32,
             send_command_feedback: true,
             show_advancement_messages: true,
             show_death_messages: true,
@@ -744,7 +761,7 @@ fn default_fall_damage() -> bool {
 fn default_fire_damage() -> bool {
     GameRuleRegistry::default().fire_damage
 }
-fn default_fire_spread_radius_around_player() -> i64 {
+fn default_fire_spread_radius_around_player() -> i32 {
     GameRuleRegistry::default().fire_spread_radius_around_player
 }
 fn default_forgive_dead_players() -> bool {
@@ -774,22 +791,22 @@ fn default_locator_bar() -> bool {
 fn default_log_admin_commands() -> bool {
     GameRuleRegistry::default().log_admin_commands
 }
-fn default_max_block_modifications() -> i64 {
+fn default_max_block_modifications() -> i32 {
     GameRuleRegistry::default().max_block_modifications
 }
-fn default_max_command_forks() -> i64 {
+fn default_max_command_forks() -> i32 {
     GameRuleRegistry::default().max_command_forks
 }
-fn default_max_command_sequence_length() -> i64 {
+fn default_max_command_sequence_length() -> i32 {
     GameRuleRegistry::default().max_command_sequence_length
 }
-fn default_max_entity_cramming() -> i64 {
+fn default_max_entity_cramming() -> i32 {
     GameRuleRegistry::default().max_entity_cramming
 }
-fn default_max_minecart_speed() -> i64 {
+fn default_max_minecart_speed() -> i32 {
     GameRuleRegistry::default().max_minecart_speed
 }
-fn default_max_snow_accumulation_height() -> i64 {
+fn default_max_snow_accumulation_height() -> i32 {
     GameRuleRegistry::default().max_snow_accumulation_height
 }
 fn default_mob_drops() -> bool {
@@ -807,13 +824,13 @@ fn default_natural_health_regeneration() -> bool {
 fn default_player_movement_check() -> bool {
     GameRuleRegistry::default().player_movement_check
 }
-fn default_players_nether_portal_creative_delay() -> i64 {
+fn default_players_nether_portal_creative_delay() -> i32 {
     GameRuleRegistry::default().players_nether_portal_creative_delay
 }
-fn default_players_nether_portal_default_delay() -> i64 {
+fn default_players_nether_portal_default_delay() -> i32 {
     GameRuleRegistry::default().players_nether_portal_default_delay
 }
-fn default_players_sleeping_percentage() -> i64 {
+fn default_players_sleeping_percentage() -> i32 {
     GameRuleRegistry::default().players_sleeping_percentage
 }
 fn default_projectiles_can_break_blocks() -> bool {
@@ -825,13 +842,13 @@ fn default_pvp() -> bool {
 fn default_raids() -> bool {
     GameRuleRegistry::default().raids
 }
-fn default_random_tick_speed() -> i64 {
+fn default_random_tick_speed() -> i32 {
     GameRuleRegistry::default().random_tick_speed
 }
 fn default_reduced_debug_info() -> bool {
     GameRuleRegistry::default().reduced_debug_info
 }
-fn default_respawn_radius() -> i64 {
+fn default_respawn_radius() -> i32 {
     GameRuleRegistry::default().respawn_radius
 }
 fn default_send_command_feedback() -> bool {

@@ -19,14 +19,29 @@ pub fn build() -> TokenStream {
     let mut default_values = TokenStream::new();
     let mut getter_match = TokenStream::new();
     let mut mut_getter_match = TokenStream::new();
+    let mut integer_variant_bounds_match = TokenStream::new();
     let mut default_functions = TokenStream::new();
 
     for (raw_name, raw_value) in &game_rules {
-        let (variant_type, field_type, default_value) = match raw_value {
-            Value::Bool(b) => (quote! { Bool }, quote! { bool }, quote! { #b }),
-            Value::Number(n) if n.is_i64() => {
-                let i = n.as_i64().unwrap();
-                (quote! { Int }, quote! { i64 }, quote! { #i })
+        let (variant_type, field_type, default_value, bounds) = match raw_value {
+            Value::Bool(b) => (quote! { Bool }, quote! { bool }, quote! { #b }, None),
+            Value::Object(map) => {
+                let Some(Value::Number(min)) = map.get("min") else {
+                    panic!("Invalid or no 'min' value for game rule");
+                };
+                let min = min.as_i64().unwrap() as i32;
+
+                let Some(Value::Number(max)) = map.get("max") else {
+                    panic!("Invalid or no 'max' value for game rule");
+                };
+                let max = max.as_i64().unwrap() as i32;
+
+                let Some(Value::Number(default)) = map.get("default") else {
+                    panic!("Invalid or no 'default' value for game rule");
+                };
+                let default = default.as_i64().unwrap() as i32;
+
+                (quote! { Int }, quote! { i32 }, quote! { #default }, Some( quote! { (#min, #max) }) )
             }
             _ => panic!("Unsupported value type for key '{raw_name}'"),
         };
@@ -73,6 +88,13 @@ pub fn build() -> TokenStream {
             GameRule::#pascal_case => GameRuleValue::#variant_type(&mut self.#snake_case),
         });
 
+        // Integer game rule bound arms
+        if let Some(tokens) = bounds {
+            integer_variant_bounds_match.extend(quote! {
+                Self::#pascal_case => Some(#tokens),
+            });
+        }
+
         // Default fn
         default_functions.extend(quote! {
             fn #default_fn_ident() -> #field_type {
@@ -95,6 +117,13 @@ pub fn build() -> TokenStream {
                 &[
                     #enum_variants_list
                 ]
+            }
+
+            pub const fn bounds(&self) -> Option<(i32, i32)> {
+                match self {
+                    #integer_variant_bounds_match
+                    _ => None
+                }
             }
         }
 
@@ -126,13 +155,13 @@ pub fn build() -> TokenStream {
         }
 
         impl GameRuleRegistry {
-            pub fn get(&self, rule: &GameRule) -> GameRuleValue<&i64, &bool> {
+            pub fn get(&self, rule: &GameRule) -> GameRuleValue<&i32, &bool> {
                 match rule {
                     #getter_match
                 }
             }
 
-            pub fn get_mut(&mut self, rule: &GameRule) -> GameRuleValue<&mut i64, &mut bool> {
+            pub fn get_mut(&mut self, rule: &GameRule) -> GameRuleValue<&mut i32, &mut bool> {
                 match rule {
                     #mut_getter_match
                 }

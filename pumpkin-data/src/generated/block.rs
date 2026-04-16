@@ -504705,7 +504705,10 @@ impl BlockProperties for TntLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "unstable" { block_props.r#unstable = matches!(*value, "true") }
+            match *key {
+                "unstable" => block_props.r#unstable = matches!(*value, "true"),
+                _ => {}
+            }
         }
         block_props
     }
@@ -504831,7 +504834,10 @@ impl BlockProperties for EndRodLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "facing" { block_props.r#facing = Facing::from_value(value) }
+            match *key {
+                "facing" => block_props.r#facing = Facing::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -506768,7 +506774,10 @@ impl BlockProperties for RedstoneOreLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "lit" { block_props.r#lit = matches!(*value, "true") }
+            match *key {
+                "lit" => block_props.r#lit = matches!(*value, "true"),
+                _ => {}
+            }
         }
         block_props
     }
@@ -507339,7 +507348,10 @@ impl BlockProperties for PaleHangingMossLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "tip" { block_props.r#tip = matches!(*value, "true") }
+            match *key {
+                "tip" => block_props.r#tip = matches!(*value, "true"),
+                _ => {}
+            }
         }
         block_props
     }
@@ -507425,7 +507437,10 @@ impl BlockProperties for BubbleColumnLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "drag" { block_props.r#drag = matches!(*value, "true") }
+            match *key {
+                "drag" => block_props.r#drag = matches!(*value, "true"),
+                _ => {}
+            }
         }
         block_props
     }
@@ -508731,7 +508746,10 @@ impl BlockProperties for SculkCatalystLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "bloom" { block_props.r#bloom = matches!(*value, "true") }
+            match *key {
+                "bloom" => block_props.r#bloom = matches!(*value, "true"),
+                _ => {}
+            }
         }
         block_props
     }
@@ -508817,7 +508835,10 @@ impl BlockProperties for GrassBlockLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "snowy" { block_props.r#snowy = matches!(*value, "true") }
+            match *key {
+                "snowy" => block_props.r#snowy = matches!(*value, "true"),
+                _ => {}
+            }
         }
         block_props
     }
@@ -509014,7 +509035,10 @@ impl BlockProperties for JigsawLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "orientation" { block_props.r#orientation = Orientation::from_value(value) }
+            match *key {
+                "orientation" => block_props.r#orientation = Orientation::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -509211,7 +509235,10 @@ impl BlockProperties for RespawnAnchorLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "charges" { block_props.r#charges = Integer0To4::from_value(value) }
+            match *key {
+                "charges" => block_props.r#charges = Integer0To4::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -510026,7 +510053,10 @@ impl BlockProperties for TestBlockLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "mode" { block_props.r#mode = TestBlockMode::from_value(value) }
+            match *key {
+                "mode" => block_props.r#mode = TestBlockMode::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -510214,7 +510244,10 @@ impl BlockProperties for SnowLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "layers" { block_props.r#layers = Integer1To8::from_value(value) }
+            match *key {
+                "layers" => block_props.r#layers = Integer1To8::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -510792,7 +510825,10 @@ impl BlockProperties for FarmlandLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "moisture" { block_props.r#moisture = Integer0To7::from_value(value) }
+            match *key {
+                "moisture" => block_props.r#moisture = Integer0To7::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -510878,7 +510914,10 @@ impl BlockProperties for SuspiciousSandLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "dusted" { block_props.r#dusted = Integer0To3::from_value(value) }
+            match *key {
+                "dusted" => block_props.r#dusted = Integer0To3::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -511265,7 +511304,10 @@ impl BlockProperties for MangroveRootsLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "waterlogged" { block_props.r#waterlogged = matches!(*value, "true") }
+            match *key {
+                "waterlogged" => block_props.r#waterlogged = matches!(*value, "true"),
+                _ => {}
+            }
         }
         block_props
     }
@@ -513454,7 +513496,10 @@ impl BlockProperties for ComposterLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "level" { block_props.r#level = Integer0To8::from_value(value) }
+            match *key {
+                "level" => block_props.r#level = Integer0To8::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -513982,7 +514027,10 @@ impl BlockProperties for WallTorchLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "facing" { block_props.r#facing = HorizontalFacing::from_value(value) }
+            match *key {
+                "facing" => block_props.r#facing = HorizontalFacing::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -515137,7 +515185,10 @@ impl BlockProperties for SnifferEggLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "hatch" { block_props.r#hatch = Integer0To2::from_value(value) }
+            match *key {
+                "hatch" => block_props.r#hatch = Integer0To2::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -515325,7 +515376,10 @@ impl BlockProperties for WaterCauldronLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "level" { block_props.r#level = Integer1To3::from_value(value) }
+            match *key {
+                "level" => block_props.r#level = Integer1To3::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -515543,7 +515597,10 @@ impl BlockProperties for JukeboxLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "has_record" { block_props.r#has_record = matches!(*value, "true") }
+            match *key {
+                "has_record" => block_props.r#has_record = matches!(*value, "true"),
+                _ => {}
+            }
         }
         block_props
     }
@@ -515635,7 +515692,10 @@ impl BlockProperties for OakSaplingLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "stage" { block_props.r#stage = Integer0To1::from_value(value) }
+            match *key {
+                "stage" => block_props.r#stage = Integer0To1::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -515835,7 +515895,10 @@ impl BlockProperties for WheatLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "age" { block_props.r#age = Integer0To7::from_value(value) }
+            match *key {
+                "age" => block_props.r#age = Integer0To7::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -516143,7 +516206,10 @@ impl BlockProperties for PaleOakWoodLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "axis" { block_props.r#axis = Axis::from_value(value) }
+            match *key {
+                "axis" => block_props.r#axis = Axis::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -516265,7 +516331,10 @@ impl BlockProperties for WhiteBannerLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "rotation" { block_props.r#rotation = Integer0To15::from_value(value) }
+            match *key {
+                "rotation" => block_props.r#rotation = Integer0To15::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -516566,7 +516635,10 @@ impl BlockProperties for WaterLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "level" { block_props.r#level = Integer0To15::from_value(value) }
+            match *key {
+                "level" => block_props.r#level = Integer0To15::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -516652,7 +516724,10 @@ impl BlockProperties for KelpLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "age" { block_props.r#age = Integer0To25::from_value(value) }
+            match *key {
+                "age" => block_props.r#age = Integer0To25::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -516840,7 +516915,10 @@ impl BlockProperties for LightWeightedPressurePlateLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "power" { block_props.r#power = Integer0To15::from_value(value) }
+            match *key {
+                "power" => block_props.r#power = Integer0To15::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -516926,7 +517004,10 @@ impl BlockProperties for StructureBlockLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "mode" { block_props.r#mode = StructureblockMode::from_value(value) }
+            match *key {
+                "mode" => block_props.r#mode = StructureblockMode::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -517012,7 +517093,10 @@ impl BlockProperties for TorchflowerCropLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "age" { block_props.r#age = Integer0To1::from_value(value) }
+            match *key {
+                "age" => block_props.r#age = Integer0To1::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -517098,7 +517182,10 @@ impl BlockProperties for NetherWartLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "age" { block_props.r#age = Integer0To3::from_value(value) }
+            match *key {
+                "age" => block_props.r#age = Integer0To3::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -517406,7 +517493,10 @@ impl BlockProperties for CakeLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "bites" { block_props.r#bites = Integer0To6::from_value(value) }
+            match *key {
+                "bites" => block_props.r#bites = Integer0To6::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -517492,7 +517582,10 @@ impl BlockProperties for NetherPortalLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "axis" { block_props.r#axis = HorizontalAxis::from_value(value) }
+            match *key {
+                "axis" => block_props.r#axis = HorizontalAxis::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -517610,7 +517703,10 @@ impl BlockProperties for StonePressurePlateLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "powered" { block_props.r#powered = matches!(*value, "true") }
+            match *key {
+                "powered" => block_props.r#powered = matches!(*value, "true"),
+                _ => {}
+            }
         }
         block_props
     }
@@ -517702,7 +517798,10 @@ impl BlockProperties for TallSeagrassLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "half" { block_props.r#half = DoubleBlockHalf::from_value(value) }
+            match *key {
+                "half" => block_props.r#half = DoubleBlockHalf::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -517788,7 +517887,10 @@ impl BlockProperties for CaveVinesPlantLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "berries" { block_props.r#berries = matches!(*value, "true") }
+            match *key {
+                "berries" => block_props.r#berries = matches!(*value, "true"),
+                _ => {}
+            }
         }
         block_props
     }
@@ -517874,7 +517976,10 @@ impl BlockProperties for ChorusFlowerLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "age" { block_props.r#age = Integer0To5::from_value(value) }
+            match *key {
+                "age" => block_props.r#age = Integer0To5::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }
@@ -517960,7 +518065,10 @@ impl BlockProperties for CactusLikeProperties {
         }
         let mut block_props = Self::default(block);
         for (key, value) in props {
-            if *key == "age" { block_props.r#age = Integer0To15::from_value(value) }
+            match *key {
+                "age" => block_props.r#age = Integer0To15::from_value(value),
+                _ => {}
+            }
         }
         block_props
     }

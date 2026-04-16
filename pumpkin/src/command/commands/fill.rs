@@ -301,7 +301,7 @@ impl CommandExecutor for Executor {
                 * (context.end_y - context.start_y + 1) as i64
                 * (context.end_z - context.start_z + 1) as i64;
 
-            if total_blocks > max_block_modifications {
+            if total_blocks > max_block_modifications as i64 {
                 return Err(CommandError::CommandFailed(TextComponent::translate(
                     translation::COMMANDS_FILL_TOOBIG,
                     [

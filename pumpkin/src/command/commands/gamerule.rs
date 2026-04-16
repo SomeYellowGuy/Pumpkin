@@ -31,9 +31,7 @@ impl CommandExecutor for QueryExecutor {
             let level_info = server.level_info.load();
             let game_rule = level_info.game_rules.get(&self.0);
             let game_rule_i32_value = match game_rule {
-                GameRuleValue::Int(value) => {
-                    (*value).clamp(i32::MIN as i64, i32::MAX as i64) as i32
-                }
+                GameRuleValue::Int(value) => *value,
                 GameRuleValue::Bool(value) => *value as i32,
             };
             let value = TextComponent::text(game_rule.to_string());
@@ -74,12 +72,10 @@ impl CommandExecutor for SetExecutor {
 
             match raw_value {
                 GameRuleValue::Int(value) => {
-                    let arg_value = BoundedNumArgumentConsumer::<i64>::find_arg(args, ARG_NAME)??;
+                    let arg_value = BoundedNumArgumentConsumer::<i32>::find_arg(args, ARG_NAME)??;
                     *value = arg_value;
                     output_value = arg_value.to_string();
-                    // TODO: Should integer gamerule values be kept as a `i64` or should it be changed to an `i32`?
-                    // For now, we can cast it
-                    result_i32 = arg_value.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+                    result_i32 = arg_value;
                 }
                 GameRuleValue::Bool(value) => {
                     let arg_value = BoolArgConsumer::find_arg(args, ARG_NAME)?;
