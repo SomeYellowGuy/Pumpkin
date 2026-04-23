@@ -35,7 +35,7 @@ fn decode_delegate_impl(
                 let map = #codecs_crate::DynamicOps::get_map(ops, &input);
                 let single_result = #codecs_crate::DataResult::with_lifecycle(map, #codecs_crate::Lifecycle::Stable)
                     .flat_map(|map| {
-                        #codecs_crate::codec::MapDecode::map_decode(map, ops)
+                        #codecs_crate::codec::MapDecode::map_decode(&map, ops)
                 });
                 #codecs_crate::DataResult::map(single_result, |s| (s, input))
             }
@@ -68,7 +68,7 @@ fn derive_struct_decode(
     quote! {
         impl #codecs_crate::codec::MapDecode for #name {
             fn map_decode<O: #codecs_crate::DynamicOps>(
-                    map: impl #codecs_crate::MapLike<Value = O::Value>,
+                    map: &impl #codecs_crate::MapLike<Value = O::Value>,
                     ops: &'static O,
                 ) -> #codecs_crate::DataResult<Self> {
                 #variant_decode
@@ -134,7 +134,7 @@ fn derive_enum_decode(
                 codecs_crate,
                 name,
                 &variant.fields,
-                &qualified_variant_ident,
+                &qualified_variant_ident
             )
         };
         match_arms.push(quote! {
@@ -148,10 +148,10 @@ fn derive_enum_decode(
         quote! {
             impl #codecs_crate::codec::MapDecode for #name {
                 fn map_decode<O: #codecs_crate::DynamicOps>(
-                    map: impl #codecs_crate::MapLike<Value = O::Value>,
+                    map: &impl #codecs_crate::MapLike<Value = O::Value>,
                     ops: &'static O,
                 ) -> #codecs_crate::DataResult<Self> {
-                    let ty: #codecs_crate::DataResult<String> = #codecs_crate::codec::FieldDecode::decode_field::<O>(#tag_key_lit, &map, ops);
+                    let ty: #codecs_crate::DataResult<String> = #codecs_crate::codec::FieldDecode::decode_field::<O>(#tag_key_lit, map, ops);
                     ty.flat_map(|ty| {
                         match ty.as_str() {
                             #( #match_arms ),*
@@ -171,7 +171,7 @@ fn derive_single_variant_decode(
     codecs_crate: &proc_macro2::TokenStream,
     variant_ident: &Ident,
     fields: &Fields,
-    variant_tokens: &proc_macro2::TokenStream,
+    variant_tokens: &proc_macro2::TokenStream
 ) -> proc_macro2::TokenStream {
     let mut builder_decodes = Vec::new();
     // The counted encoded values.
@@ -238,7 +238,7 @@ struct DecodeFieldData {
 fn decode_field_tokens(
     codecs_crate: &proc_macro2::TokenStream,
     field: ParsedField,
-    counter: &mut usize,
+    counter: &mut usize
 ) -> Result<DecodeFieldData, Error> {
     let ident = field.named_ident();
     match field.generate_field_data()? {
@@ -247,31 +247,36 @@ fn decode_field_tokens(
             lenient,
             default,
             implicit_default,
+            flatten
         } => {
             let encoded_name_lit = LitStr::new(&name, Span::call_site());
             let decoded_ident = format_ident!("a{counter}");
             let constructor_ident = ident.unwrap_or(&decoded_ident);
             *counter += 1;
             let builder_decode = {
-                if let Some(ty) = option_type(field.ty()) {
+                if flatten {
+                    quote! {
+                        let #decoded_ident = #codecs_crate::codec::MapDecode::map_decode(map, ops);
+                    }
+                } else if let Some(ty) = option_type(field.ty()) {
                     // For an Option, it can be lenient.
                     let lenient_token = LitBool::new(lenient, Span::call_site());
                     quote! {
-                        let #decoded_ident: #codecs_crate::DataResult<Option<#ty>> = #codecs_crate::codec::optional_field::OptionalFieldDecode::decode_optional_field::<O>(#encoded_name_lit, &map, ops, #lenient_token);
+                        let #decoded_ident: #codecs_crate::DataResult<Option<#ty>> = #codecs_crate::codec::optional_field::OptionalFieldDecode::decode_optional_field::<O>(#encoded_name_lit, map, ops, #lenient_token);
                     }
                 } else if default.is_some() || implicit_default {
                     let lenient_token = LitBool::new(lenient, Span::call_site());
                     let default_tokens = default.unwrap_or_else(|| quote! {Default::default()});
                     let ty = field.ty();
                     quote! {
-                        let #decoded_ident: #codecs_crate::DataResult<#ty> = #codecs_crate::codec::FieldDecode::decode_defaulted_field::<O>(#encoded_name_lit, &map, ops, #default_tokens, #lenient_token);
+                        let #decoded_ident: #codecs_crate::DataResult<#ty> = #codecs_crate::codec::FieldDecode::decode_defaulted_field::<O>(#encoded_name_lit, map, ops, #default_tokens, #lenient_token);
                     }
                 } else {
                     if lenient {
                         return Err(Error::new_spanned(field.ty(), "Invalid use of `lenient`"));
                     }
                     quote! {
-                        let #decoded_ident = #codecs_crate::codec::FieldDecode::decode_field::<O>(#encoded_name_lit, &map, ops);
+                        let #decoded_ident = #codecs_crate::codec::FieldDecode::decode_field::<O>(#encoded_name_lit, map, ops);
                     }
                 }
             };

@@ -159,7 +159,7 @@ impl<T: Decode> FieldDecode for T {
 pub trait MapDecode: Sized {
     /// Decodes a value of this type from a map by decoding one or more fields.
     fn map_decode<O: DynamicOps>(
-        input: impl MapLike<Value = O::Value>,
+        input: &impl MapLike<Value = O::Value>,
         ops: &'static O,
     ) -> DataResult<Self>;
 }
