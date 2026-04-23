@@ -205,22 +205,29 @@ fn encode_field_tokens(
             name,
             default,
             implicit_default,
+            flatten,
             ..
         } => {
             let access = access_fn(&field);
             let encoded_name_lit = LitStr::new(&name, Span::call_site());
-            let builder_encode = if option_type(field.ty()).is_some() {
-                quote! {
-                    builder = #codecs_crate::codec::optional_field::OptionalFieldEncode::encode_optional_field(#access, #encoded_name_lit, ops, builder);
-                }
-            } else if default.is_some() || implicit_default {
-                let default_tokens = default.unwrap_or_else(|| quote! {Default::default()});
-                quote! {
-                    builder = #codecs_crate::codec::FieldEncode::encode_defaulted_field(#access, #encoded_name_lit, ops, builder, #default_tokens);
-                }
-            } else {
-                quote! {
-                    builder = #codecs_crate::codec::FieldEncode::encode_field(#access, #encoded_name_lit, ops, builder);
+            let builder_encode = {
+                if flatten {
+                    quote! {
+                        builder = #codecs_crate::codec::MapEncode::map_encode(#access, ops, builder);
+                    }
+                } else if option_type(field.ty()).is_some() {
+                    quote! {
+                        builder = #codecs_crate::codec::optional_field::OptionalFieldEncode::encode_optional_field(#access, #encoded_name_lit, ops, builder);
+                    }
+                } else if default.is_some() || implicit_default {
+                    let default_tokens = default.unwrap_or_else(|| quote! {Default::default()});
+                    quote! {
+                        builder = #codecs_crate::codec::FieldEncode::encode_defaulted_field(#access, #encoded_name_lit, ops, builder, #default_tokens);
+                    }
+                } else {
+                    quote! {
+                        builder = #codecs_crate::codec::FieldEncode::encode_field(#access, #encoded_name_lit, ops, builder);
+                    }
                 }
             };
             Ok(EncodeFieldData {

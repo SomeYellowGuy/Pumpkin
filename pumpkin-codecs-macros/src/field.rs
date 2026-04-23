@@ -16,6 +16,9 @@ pub enum FieldData {
         /// If this is true, tells that the `default` attribute was specified,
         /// but no specific default value was set.
         implicit_default: bool,
+        /// If this is true, inlines the fields encoded by this field into
+        /// the parent's map while encoding.
+        flatten: bool
     },
     /// Serialization of the field is ignored.
     Skipped { default: proc_macro2::TokenStream },
@@ -35,6 +38,7 @@ pub enum ParsedFieldAttribute {
     Lenient,
     Name,
     Skip,
+    Flatten
 }
 
 impl ParsedAttribute for ParsedFieldAttribute {
@@ -43,6 +47,7 @@ impl ParsedAttribute for ParsedFieldAttribute {
         add_attribute_branch!(path, "lenient", Lenient);
         add_attribute_branch!(path, "name", Name);
         add_attribute_branch!(path, "skip", Skip);
+        add_attribute_branch!(path, "flatten", Flatten);
         None
     }
 }
@@ -51,16 +56,16 @@ impl<'a> ParsedField<'a> {
     /// Returns the name of this field as an `Ident`, as a reference, if any.
     pub const fn named_ident(self) -> Option<&'a Ident> {
         match self {
-            ParsedField::Named(f) => Some(f.ident.as_ref().unwrap()),
-            ParsedField::Unnamed(_, _) => None,
+            Self::Named(f) => Some(f.ident.as_ref().unwrap()),
+            Self::Unnamed(_, _) => None,
         }
     }
 
     /// Returns the index of this field, if any.
     pub const fn index(&self) -> Option<usize> {
         match self {
-            ParsedField::Named(_) => None,
-            ParsedField::Unnamed(_, i) => Some(*i),
+            Self::Named(_) => None,
+            Self::Unnamed(_, i) => Some(*i),
         }
     }
 
@@ -68,22 +73,22 @@ impl<'a> ParsedField<'a> {
     /// It can be an `Ident` or `Index`.
     pub fn access(self) -> proc_macro2::TokenStream {
         match self {
-            ParsedField::Named(f) => f.ident.as_ref().unwrap().clone().into_token_stream(),
-            ParsedField::Unnamed(_, i) => Index::from(i).into_token_stream(),
+            Self::Named(f) => f.ident.as_ref().unwrap().clone().into_token_stream(),
+            Self::Unnamed(_, i) => Index::from(i).into_token_stream(),
         }
     }
 
     /// Returns the `Type`, as a reference, of this field.
     pub const fn ty(self) -> &'a Type {
         match self {
-            ParsedField::Named(f) | ParsedField::Unnamed(f, _) => &f.ty,
+            Self::Named(f) | Self::Unnamed(f, _) => &f.ty,
         }
     }
 
     /// Returns a slice of the list of `Attribute`s of this field.
     pub fn attrs(self) -> &'a [Attribute] {
         match self {
-            ParsedField::Named(f) | ParsedField::Unnamed(f, _) => &f.attrs,
+            Self::Named(f) | Self::Unnamed(f, _) => &f.attrs,
         }
     }
 
@@ -91,9 +96,9 @@ impl<'a> ParsedField<'a> {
     /// which may or may not be used.
     pub const fn from_field(value: &'a Field, index: usize) -> Self {
         if value.ident.is_some() {
-            ParsedField::Named(value)
+            Self::Named(value)
         } else {
-            ParsedField::Unnamed(value, index)
+            Self::Unnamed(value, index)
         }
     }
 
@@ -104,6 +109,7 @@ impl<'a> ParsedField<'a> {
         let mut implicit_default = false;
         let mut skipped = false;
         let mut lenient = false;
+        let mut flatten = false;
 
         ParsedAttribute::parse_attributes(self.attrs(), |attribute, meta, ident| {
             match attribute {
@@ -143,39 +149,54 @@ impl<'a> ParsedField<'a> {
                     }
                     skipped = true;
                 }
+                // flatten
+                ParsedFieldAttribute::Flatten => {
+                    if flatten {
+                        return Err(duplicate_attribute_error(ident));
+                    }
+                    flatten = true;
+                }
             }
             Ok(())
         })?;
 
         if skipped {
-            if field_name.is_some() || lenient {
+            if field_name.is_some() || lenient || flatten {
                 return Err(Error::new_spanned(
                     self.access(),
-                    "Cannot specify `name` or `lenient` for a skipped field",
+                    "Cannot specify this attribute for a skipped field",
                 ));
             }
             // Default to using the Default trait if no specific default value is given.
-            Ok(FieldData::Skipped {
+            return Ok(FieldData::Skipped {
                 default: default.unwrap_or_else(|| quote! { Default::default() }),
             })
-        } else {
-            let name = field_name.or_else(|| self.named_ident().map(ToString::to_string));
-            name.map_or_else(
-                || {
-                    Err(Error::new_spanned(
-                        self.access(),
-                        "No field name could be inferred",
-                    ))
-                },
-                |name| {
-                    Ok(FieldData::Present {
-                        name,
-                        lenient,
-                        default,
-                        implicit_default,
-                    })
-                },
-            )
         }
+
+        if flatten && (default.is_some() || implicit_default) {
+            return Err(Error::new_spanned(
+                self.access(),
+                "Cannot use `flatten` and `default` attributes together",
+            ));
+        }
+
+        let name = field_name.or_else(|| self.named_ident().map(ToString::to_string));
+        name.map_or_else(
+            || {
+                Err(Error::new_spanned(
+                    self.access(),
+                    "No field name could be inferred",
+                ))
+            },
+            |name| {
+                Ok(FieldData::Present {
+                    name,
+                    lenient,
+                    default,
+                    implicit_default,
+                    flatten
+                })
+            },
+        )
     }
 }

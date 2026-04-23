@@ -1,13 +1,30 @@
 use pumpkin_codecs::json_ops::JsonOps;
-use pumpkin_codecs::{assert_decode, assert_decode_success, assert_encode_success};
+use pumpkin_codecs::{assert_decode, assert_decode_success, assert_encode_success, DataResult, Decode, DynamicOps, Lifecycle, MapLike};
 use pumpkin_codecs_macros::{Decode, Encode};
 use serde_json::json;
+use pumpkin_codecs::codec::{FieldDecode, MapDecode};
 
-#[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]
+#[derive(Debug, PartialEq, Eq, Clone, Encode)]
 pub struct Book {
     name: String,
     author: String,
     pages: u32,
+}
+
+impl MapDecode for Book {
+    fn map_decode<O: DynamicOps>(map: &impl MapLike<Value=O::Value>, ops: &'static O ) -> DataResult<Self> {
+        let a0 = FieldDecode::decode_field::<O>("name", map, ops);
+        let a1 = FieldDecode::decode_field::<O>("author", map, ops);
+        let a2 = FieldDecode::decode_field::<O>("pages", map, ops);
+        a0.apply_3(|name, author, pages| Self { name, author, pages }, a1, a2)
+    }
+}
+impl Decode for Book {
+    fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
+        let map = DynamicOps::get_map(ops, &input);
+        let single_result = DataResult::with_lifecycle(map, Lifecycle::Stable).flat_map(|map| { MapDecode::map_decode(map, ops) });
+        DataResult::map(single_result, |s| (s, input))
+    }
 }
 
 #[test]
