@@ -22,7 +22,7 @@ impl MapDecode for Book {
 impl Decode for Book {
     fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
         let map = DynamicOps::get_map(ops, &input);
-        let single_result = DataResult::with_lifecycle(map, Lifecycle::Stable).flat_map(|map| { MapDecode::map_decode(map, ops) });
+        let single_result = DataResult::with_lifecycle(map, Lifecycle::Stable).flat_map(|map| { MapDecode::map_decode(&map, ops) });
         DataResult::map(single_result, |s| (s, input))
     }
 }

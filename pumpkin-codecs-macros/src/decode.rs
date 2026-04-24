@@ -1,12 +1,10 @@
-use crate::field::{FieldData, ParsedField};
-use crate::{option_type, parse_enum_dispatch_attributes, parse_enum_variant_attributes};
+use crate::field::{FieldData, FieldKind, ParsedField, PresentFieldData};
+use crate::{parse_enum_dispatch_attributes, parse_enum_variant_attributes};
 use proc_macro::TokenStream;
 use proc_macro_error2::__export::proc_macro2;
 use proc_macro_error2::__export::proc_macro2::Span;
 use quote::{ToTokens, format_ident, quote};
-use syn::{
-    Attribute, Data, DataEnum, DataStruct, DeriveInput, Error, Fields, Ident, LitBool, LitStr,
-};
+use syn::{Attribute, Data, DataEnum, DataStruct, DeriveInput, Error, Fields, Ident, LitBool, LitStr, Path};
 
 pub fn derive_decode(
     codecs_crate: &proc_macro2::TokenStream,
@@ -235,6 +233,86 @@ struct DecodeFieldData {
     field_output: proc_macro2::TokenStream,
 }
 
+/// A modifier applied to a value after decoding.
+pub enum DecodeModifier {
+    Validate(Path)
+}
+
+impl DecodeModifier {
+    pub fn is_validate(&self) -> bool {
+        matches!(self, DecodeModifier::Validate(_))
+    }
+}
+
+impl DecodeModifier {
+    fn generate(&self, codecs_crate: &proc_macro2::TokenStream, ident: &Ident) -> proc_macro2::TokenStream {
+        match self {
+            DecodeModifier::Validate(p) => quote! {
+                let #ident = #codecs_crate::DataResult::flat_map(#ident, |r| #p(&r).map_or_else(#codecs_crate::DataResult::new_error, |()| #codecs_crate::DataResult::new_success(r)));
+            }
+        }
+    }
+}
+
+fn decode_from_field_data(codecs_crate: &proc_macro2::TokenStream, field: ParsedField, mut data: PresentFieldData, counter: &mut usize, ident: Option<&Ident>) -> Result<DecodeFieldData, Error> {
+    let encoded_name_lit = LitStr::new(&data.name, Span::call_site());
+    let kind = FieldKind::from_data(&field, &data);
+    let decoded_ident = format_ident!("a{counter}");
+    let constructor_ident = ident.unwrap_or(&decoded_ident);
+    let builder_decode = if data.decode_modifiers.is_empty() {
+        *counter += 1;
+        match kind {
+            FieldKind::Flatten => quote! {
+                        let #decoded_ident = #codecs_crate::codec::MapDecode::map_decode(map, ops);
+                    },
+            FieldKind::Option { ty } => {
+                // For an Option, it can be lenient.
+                let lenient_token = LitBool::new(data.lenient, Span::call_site());
+                quote! {
+                            let #decoded_ident: #codecs_crate::DataResult<Option<#ty>> = #codecs_crate::codec::optional_field::OptionalFieldDecode::decode_optional_field::<O>(#encoded_name_lit, map, ops, #lenient_token);
+                        }
+            },
+            FieldKind::Defaulted { defaulted_tokens } => {
+                let lenient_token = LitBool::new(data.lenient, Span::call_site());
+                let ty = field.ty();
+                quote! {
+                            let #decoded_ident: #codecs_crate::DataResult<#ty> = #codecs_crate::codec::FieldDecode::decode_defaulted_field::<O>(#encoded_name_lit, map, ops, #defaulted_tokens, #lenient_token);
+                        }
+            },
+            FieldKind::Required => {
+                if data.lenient {
+                    return Err(Error::new_spanned(field.ty(), "Invalid use of `lenient`"));
+                }
+                quote! {
+                            let #decoded_ident = #codecs_crate::codec::FieldDecode::decode_field::<O>(#encoded_name_lit, map, ops);
+                        }
+            }
+        }
+    } else {
+        // Otherwise, we apply transformations to the value.
+        //
+        // We start with a `DataResult` success and keep mapping/flat mapping it with functions until
+        // we get the desired value to encode.
+        let mut transformations = Vec::new();
+        for modifier in data.decode_modifiers.iter().rev() {
+            let transformation = modifier.generate(codecs_crate, &decoded_ident);
+            transformations.push(transformation);
+        }
+        data.decode_modifiers.clear();
+        let l = decode_from_field_data(codecs_crate, field.into_redirect(&format_ident!("r"), field.ty()), data, counter, Some(&decoded_ident))?;
+        let inner_builder_decode = l.builder_decode;
+        quote! {
+            #inner_builder_decode
+            #(#transformations)*
+        }
+    };
+    Ok(DecodeFieldData {
+        builder_decode: Some(builder_decode),
+        field_input: Some(constructor_ident.clone().into_token_stream()),
+        field_output: constructor_ident.into_token_stream(),
+    })
+}
+
 fn decode_field_tokens(
     codecs_crate: &proc_macro2::TokenStream,
     field: ParsedField,
@@ -242,49 +320,8 @@ fn decode_field_tokens(
 ) -> Result<DecodeFieldData, Error> {
     let ident = field.named_ident();
     match field.generate_field_data()? {
-        FieldData::Present {
-            name,
-            lenient,
-            default,
-            implicit_default,
-            flatten
-        } => {
-            let encoded_name_lit = LitStr::new(&name, Span::call_site());
-            let decoded_ident = format_ident!("a{counter}");
-            let constructor_ident = ident.unwrap_or(&decoded_ident);
-            *counter += 1;
-            let builder_decode = {
-                if flatten {
-                    quote! {
-                        let #decoded_ident = #codecs_crate::codec::MapDecode::map_decode(map, ops);
-                    }
-                } else if let Some(ty) = option_type(field.ty()) {
-                    // For an Option, it can be lenient.
-                    let lenient_token = LitBool::new(lenient, Span::call_site());
-                    quote! {
-                        let #decoded_ident: #codecs_crate::DataResult<Option<#ty>> = #codecs_crate::codec::optional_field::OptionalFieldDecode::decode_optional_field::<O>(#encoded_name_lit, map, ops, #lenient_token);
-                    }
-                } else if default.is_some() || implicit_default {
-                    let lenient_token = LitBool::new(lenient, Span::call_site());
-                    let default_tokens = default.unwrap_or_else(|| quote! {Default::default()});
-                    let ty = field.ty();
-                    quote! {
-                        let #decoded_ident: #codecs_crate::DataResult<#ty> = #codecs_crate::codec::FieldDecode::decode_defaulted_field::<O>(#encoded_name_lit, map, ops, #default_tokens, #lenient_token);
-                    }
-                } else {
-                    if lenient {
-                        return Err(Error::new_spanned(field.ty(), "Invalid use of `lenient`"));
-                    }
-                    quote! {
-                        let #decoded_ident = #codecs_crate::codec::FieldDecode::decode_field::<O>(#encoded_name_lit, map, ops);
-                    }
-                }
-            };
-            Ok(DecodeFieldData {
-                builder_decode: Some(builder_decode),
-                field_input: Some(constructor_ident.clone().into_token_stream()),
-                field_output: constructor_ident.into_token_stream(),
-            })
+        FieldData::Present(data) => {
+            decode_from_field_data(codecs_crate, field, data, counter, ident)
         }
         FieldData::Skipped { default } => {
             let default_tokens =

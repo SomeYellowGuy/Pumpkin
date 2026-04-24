@@ -14,12 +14,21 @@
 //! - `lenient`: Only for encoding `Option`s and defaulted fields. If a value is present and cannot be successfully decoded,
 //!   the value is ignored and a `None`/the default value is decoded instead.
 //! - `flatten`: Flattens key-value pairs of a field whose type implements `MapEncode`/`MapDecode`.
-//!   This cannot be used with `default`.
+//!   This cannot be used with `default` and functional field attributes (given later).
+//!
+//! ### Functional Field Attributes
+//! The order of these attributes matters because transformations are applied simultaneously. The ones specified first
+//! are applied first.
+//!
+//! *Note:* For optional and defaulted fields, the **field's type** is optional, not the resulting type.
+//!
+//! - `validate = "func"`: Validates a field's value before encoding and/or after decoding. The `func`'s signature must be `(&T) -> Result<(), S>`,
+//!   where `S: Into<String>`. Two common types of `S` are `String` and `&str`.
 //!
 //! ## Struct/Enum Body Attributes
 //! - `tag_key = "x"` on `enum`s: Tells the key for storing the enum's type. This is used to differentiate the variant
 //!   during decoding. If omitted, this defaults to `"type"`.
-//! - `rename_all = "x"`: Changes the tags of all enum variants, whose tag is not overridden already, to be of a certain case's
+//! - `rename_all = "x"`: (TODO) Changes the tags of all enum variants, whose tag is not overridden already, to be of a certain case's
 //!   version of the variant's name. The valid options are:
 //!   - `"upper_case"`
 //!   - `"lowercase"`
@@ -55,7 +64,7 @@ fn crate_token() -> proc_macro2::TokenStream {
 
 /// Derives the `Encode` trait for a struct.
 ///
-/// This trait also derives `MapEncode` (except for enums whose variants are all units),
+/// This trait also derives `MapEncode` (except for enums whose variants are all units and unit structs),
 /// though this trait may only be useful directly for certain cases,
 /// which is then used to derive `Encode`.
 ///
@@ -68,7 +77,7 @@ pub fn derive_encode(input: TokenStream) -> TokenStream {
 
 /// Derives the `Decode` trait for a struct.
 ///
-/// This trait also derives `MapDecode` (except for enums whose variants are all units),
+/// This trait also derives `MapDecode` (except for enums whose variants are all units and unit structs),
 /// though this trait may only be useful directly for certain cases,
 /// which is then used to derive `Decode`.
 ///
