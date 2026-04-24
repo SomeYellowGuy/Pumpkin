@@ -1,5 +1,5 @@
 use pumpkin_codecs::json_ops::JsonOps;
-use pumpkin_codecs::{assert_decode, assert_decode_success, assert_encode_success};
+use pumpkin_codecs::{assert_decode, assert_decode_success, assert_encode_success, Encode, Decode};
 use pumpkin_codecs_macros::{Decode, Encode};
 use serde_json::json;
 
@@ -82,4 +82,25 @@ fn flatten() {
         JsonOps,
         is_error
     );
+}
+
+#[test]
+fn validate() {
+    fn range(value: &i32) -> Result<(), &str> {
+        if value >= &1 && value <= &10 {
+            Ok(())
+        } else {
+            Err("Value must be in the interval [1, 10]")
+        }
+    }
+
+    #[derive(Debug, PartialEq, Eq, Encode, Decode)]
+    struct LimitedI32(
+        #[codec(name = "value", default = 2, validate = range)] i32
+    );
+
+    assert_encode_success!(LimitedI32(1), JsonOps, json!({"value": 1}));
+    assert_encode_success!(LimitedI32(2), JsonOps, json!({"value": 2}));
+    assert_encode_success!(LimitedI32(3), JsonOps, json!({"value": 3}));
+    assert_encode_success!(LimitedI32(11), JsonOps, json!({"value": 3}));
 }

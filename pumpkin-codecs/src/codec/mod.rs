@@ -72,7 +72,7 @@ impl<T: Encode> FieldEncode for T {
         if default == *self {
             prefix
         } else {
-            prefix.add_string_key_value_result(name, self.encode_start(ops))
+            self.encode_field(name, ops, prefix)
         }
     }
 }

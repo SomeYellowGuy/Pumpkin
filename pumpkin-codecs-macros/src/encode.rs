@@ -1,10 +1,10 @@
-use crate::field::{FieldData, ParsedField};
-use crate::{option_type, parse_enum_dispatch_attributes, parse_enum_variant_attributes};
+use crate::field::{FieldData, FieldKind, ParsedField, PresentFieldData};
+use crate::{parse_enum_dispatch_attributes, parse_enum_variant_attributes};
 use proc_macro::TokenStream;
 use proc_macro_error2::__export::proc_macro2;
 use proc_macro_error2::__export::proc_macro2::{Ident, Span};
 use quote::{format_ident, quote};
-use syn::{Attribute, Data, DataEnum, DataStruct, DeriveInput, Error, Fields, LitStr};
+use syn::{Attribute, Data, DataEnum, DataStruct, DeriveInput, Error, Fields, LitStr, Path};
 
 pub fn derive_encode(
     codecs_crate: &proc_macro2::TokenStream,
@@ -195,47 +195,122 @@ struct EncodeFieldData {
     builder_encode: Option<proc_macro2::TokenStream>,
 }
 
+/// A modifier applied to a value before encoding.
+pub enum EncodeModifier {
+    Validate(Path)
+}
+
+impl EncodeModifier {
+    pub fn is_validate(&self) -> bool {
+        matches!(self, EncodeModifier::Validate(_))
+    }
+}
+
+impl EncodeModifier {
+    fn generate(&self, codecs_crate: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+        match self {
+            EncodeModifier::Validate(p) => quote! {
+                let r = #codecs_crate::DataResult::flat_map(r, |r| #p(r).map_or_else(#codecs_crate::DataResult::new_error, |()| #codecs_crate::DataResult::new_success(r)));
+            }
+        }
+    }
+}
+
 fn encode_field_tokens(
     codecs_crate: &proc_macro2::TokenStream,
     field: ParsedField,
     access_fn: impl Fn(&ParsedField) -> proc_macro2::TokenStream,
 ) -> Result<EncodeFieldData, Error> {
-    match field.generate_field_data()? {
-        FieldData::Present {
-            name,
-            default,
-            implicit_default,
-            flatten,
-            ..
-        } => {
-            let access = access_fn(&field);
-            let encoded_name_lit = LitStr::new(&name, Span::call_site());
-            let builder_encode = {
-                if flatten {
-                    quote! {
-                        builder = #codecs_crate::codec::MapEncode::map_encode(#access, ops, builder);
-                    }
-                } else if option_type(field.ty()).is_some() {
-                    quote! {
-                        builder = #codecs_crate::codec::optional_field::OptionalFieldEncode::encode_optional_field(#access, #encoded_name_lit, ops, builder);
-                    }
-                } else if default.is_some() || implicit_default {
-                    let default_tokens = default.unwrap_or_else(|| quote! {Default::default()});
-                    quote! {
-                        builder = #codecs_crate::codec::FieldEncode::encode_defaulted_field(#access, #encoded_name_lit, ops, builder, #default_tokens);
-                    }
-                } else {
-                    quote! {
-                        builder = #codecs_crate::codec::FieldEncode::encode_field(#access, #encoded_name_lit, ops, builder);
-                    }
-                }
-            };
-            Ok(EncodeFieldData {
-                builder_encode: Some(builder_encode),
-            })
+    let data = field.generate_field_data()?;
+    match data {
+        FieldData::Present(data) => {
+            encode_from_field_data(codecs_crate, field, data, access_fn)
         }
         FieldData::Skipped { .. } => Ok(EncodeFieldData {
             builder_encode: None,
         }),
     }
+}
+
+fn encode_from_field_data(codecs_crate: &proc_macro2::TokenStream, field: ParsedField, mut data: PresentFieldData, access_fn: impl Fn(&ParsedField) -> proc_macro2::TokenStream) -> Result<EncodeFieldData, Error> {
+    let access = access_fn(&field);
+    let encoded_name_lit = LitStr::new(&data.name, Span::call_site());
+    let kind = FieldKind::from_data(&field, &data);
+    let builder_encode = if data.encode_modifiers.is_empty() {
+        // If there are no encode modifiers, use the simple trait functions.
+        match kind {
+            FieldKind::Flatten => quote! {
+                builder = #codecs_crate::codec::MapEncode::map_encode(#access, ops, builder);
+            },
+            FieldKind::Option { .. } => quote! {
+                builder = #codecs_crate::codec::optional_field::OptionalFieldEncode::encode_optional_field(#access, #encoded_name_lit, ops, builder);
+            },
+            FieldKind::Defaulted {defaulted_tokens} => {
+                quote! {
+                    builder = #codecs_crate::codec::FieldEncode::encode_defaulted_field(#access, #encoded_name_lit, ops, builder, #defaulted_tokens);
+                }
+            },
+            FieldKind::Required => quote! {
+                builder = #codecs_crate::codec::FieldEncode::encode_field(#access, #encoded_name_lit, ops, builder);
+            }
+        }
+    } else {
+        // Otherwise, we apply transformations to the value.
+        //
+        // We start with a `DataResult` success and keep mapping/flat mapping it with functions until
+        // we get the desired value to encode.
+        let mut transformations = Vec::new();
+        for modifier in &data.encode_modifiers {
+            let transformation = modifier.generate(codecs_crate);
+            transformations.push(transformation);
+        }
+        data.encode_modifiers.clear();
+        let g =  &data.final_type.as_ref().unwrap_or_else(|| field.ty());
+        let builder_encode_end = match FieldKind::from_data(&field.into_redirect(&format_ident!("r"), g), &data) {
+            // `flatten` does not work with any modifiers.
+            FieldKind::Flatten => unimplemented!(),
+            FieldKind::Option {..} => {
+                quote! {
+                    builder = #codecs_crate::struct_builder::StructBuilder::with_errors_from(builder, &r);
+                    let builder = match r {
+                        #codecs_crate::DataResult::Success { result, .. } => if let Some(value) = result {
+                            #codecs_crate::codec::FieldEncode::encode_field(value, #encoded_name_lit, ops, builder)
+                        } else {
+                            builder
+                        },
+                        #codecs_crate::DataResult::Error { .. } => builder
+                    };
+                }
+            },
+            FieldKind::Defaulted {defaulted_tokens} => {
+                quote! {
+                    builder = #codecs_crate::struct_builder::StructBuilder::with_errors_from(builder, &r);
+                    let builder = match r {
+                        #codecs_crate::DataResult::Success { result, .. } => if #defaulted_tokens == *result {
+                            builder
+                        } else {
+                            #codecs_crate::codec::FieldEncode::encode_field(result, #encoded_name_lit, ops, builder)
+                        },
+                        #codecs_crate::DataResult::Error { .. } => builder
+                    };
+                }
+            },
+            FieldKind::Required => {
+                quote! {
+                    builder = #codecs_crate::struct_builder::StructBuilder::add_string_key_value_result(
+                        #encoded_name_lit, #codecs_crate::DataResult::flat_map(r, |r| #codecs_crate::codec::FieldEncode::encode_start(t, ops))
+                    );
+                }
+            }
+        };
+        quote! {
+            let r = #codecs_crate::DataResult::new_success(#access);
+            #(#transformations)*
+            #builder_encode_end
+        }
+    };
+
+    Ok(EncodeFieldData {
+        builder_encode: Some(builder_encode),
+    })
 }
