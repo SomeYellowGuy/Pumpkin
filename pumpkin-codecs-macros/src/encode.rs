@@ -231,15 +231,15 @@ pub enum EncodeModifier {
 }
 
 impl EncodeModifier {
-    pub fn is_validate(&self) -> bool {
-        matches!(self, EncodeModifier::Validate(_))
+    pub const fn is_validate(&self) -> bool {
+        matches!(self, Self::Validate(_))
     }
 }
 
 impl EncodeModifier {
     fn generate(&self, codecs_crate: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
         match self {
-            EncodeModifier::Validate(p) => quote! {
+            Self::Validate(p) => quote! {
                 let r = #codecs_crate::DataResult::flat_map(r, |r| #p(r).map_or_else(#codecs_crate::DataResult::new_error, |()| #codecs_crate::DataResult::new_success(r)));
             },
         }
@@ -254,7 +254,7 @@ fn encode_field_tokens(
 ) -> Result<EncodeFieldData, Error> {
     let data = field.generate_field_data(transparent)?;
     match data {
-        FieldData::Present(data) => encode_from_field_data(codecs_crate, field, data, access_fn),
+        FieldData::Present(data) => Ok(encode_from_field_data(codecs_crate, field, *data, access_fn)),
         FieldData::Skipped { .. } => Ok(EncodeFieldData {
             builder_encode: None,
         }),
@@ -266,7 +266,7 @@ fn encode_from_field_data(
     field: ParsedField,
     mut data: PresentFieldData,
     access_fn: impl Fn(&ParsedField) -> proc_macro2::TokenStream,
-) -> Result<EncodeFieldData, Error> {
+) -> EncodeFieldData {
     let access = access_fn(&field);
     let encoded_name_lit = LitStr::new(&data.name, Span::call_site());
     let kind = FieldKind::from_data(&field, &data);
@@ -347,7 +347,7 @@ fn encode_from_field_data(
         }
     };
 
-    Ok(EncodeFieldData {
+    EncodeFieldData {
         builder_encode: Some(builder_encode),
-    })
+    }
 }

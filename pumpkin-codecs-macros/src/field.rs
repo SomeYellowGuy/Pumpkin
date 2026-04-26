@@ -1,16 +1,16 @@
 use crate::attribute::{ParsedAttribute, add_attribute_branch};
 use crate::decode::DecodeModifier;
-pub(crate) use crate::encode::EncodeModifier;
+pub use crate::encode::EncodeModifier;
 use crate::{duplicate_attribute_error, option_type};
 use proc_macro_error2::__export::proc_macro2;
-use proc_macro_error2::__export::proc_macro2::Ident;
+use proc_macro_error2::__export::proc_macro2::{Ident, TokenStream};
 use quote::{ToTokens, quote};
 use syn::{Attribute, Error, Field, Index, LitStr, Path, Token, Type};
 
 /// Data from parsing a single field.
 pub enum FieldData {
     /// Serialization occurs with the given field name.
-    Present(PresentFieldData),
+    Present(Box<PresentFieldData>),
     /// Serialization of the field is ignored.
     Skipped { default: proc_macro2::TokenStream },
 }
@@ -50,7 +50,7 @@ pub enum FieldKind<'a> {
 }
 
 impl<'a> FieldKind<'a> {
-    pub fn from_data(field: &ParsedField<'a>, data: &PresentFieldData) -> FieldKind<'a> {
+    pub fn from_data(field: &ParsedField<'a>, data: &PresentFieldData) -> Self {
         if data.transparent {
             FieldKind::Transparent
         } else if data.flatten {
@@ -107,6 +107,18 @@ impl ParsedAttribute for ParsedFieldAttribute {
     }
 }
 
+struct ParsedFieldAttributeData {
+    field_name: Option<String>,
+    default: Option<TokenStream>,
+    implicit_default: bool,
+    skipped: bool,
+    lenient: bool,
+    flatten: bool,
+    encode_modifiers: Vec<EncodeModifier>,
+    decode_modifiers: Vec<DecodeModifier>,
+    final_type: Option<Type>
+}
+
 impl<'a> ParsedField<'a> {
     /// Returns the name of this field as an `Ident`, as a reference, if any.
     pub const fn named_ident(self) -> Option<&'a Ident> {
@@ -153,8 +165,7 @@ impl<'a> ParsedField<'a> {
     pub const fn into_redirect(self, redirect_ident: &'a Ident, redirect_ty: &'a Type) -> Self {
         Self::Redirect {
             original: match self {
-                ParsedField::Named(f) => f,
-                ParsedField::Unnamed(f, _) => f,
+                ParsedField::Named(f) | ParsedField::Unnamed(f, _) => f,
                 ParsedField::Redirect { original, .. } => original,
             },
             redirect_ident,
@@ -182,63 +193,70 @@ impl<'a> ParsedField<'a> {
 
     /// Parses this field to get its [`FieldData`].
     pub fn generate_field_data(self, transparent: bool) -> Result<FieldData, Error> {
-        let mut field_name = None;
-        let mut default = None;
-        let mut implicit_default = false;
-        let mut skipped = false;
-        let mut lenient = false;
-        let mut flatten = false;
-        let mut encode_modifiers = Vec::new();
-        let mut decode_modifiers = Vec::new();
-        let mut final_type = None;
+
+        let mut data = ParsedFieldAttributeData {
+            field_name: None,
+            default: None,
+            implicit_default: false,
+            skipped: false,
+            lenient: false,
+            flatten: false,
+            encode_modifiers: Vec::new(),
+            decode_modifiers: Vec::new(),
+            final_type: None,
+        };
 
         ParsedAttribute::parse_attributes(self.attrs(), |attribute, meta, ident| {
             match attribute {
                 // default or default = ..
                 ParsedFieldAttribute::Default => {
-                    if default.is_some() {
+                    if data.default.is_some() {
                         return Err(duplicate_attribute_error(ident));
                     }
                     if meta.input.peek(Token![=]) {
                         let expr: syn::Expr = meta.value()?.parse()?;
-                        default = Some(expr.into_token_stream());
+                        data.default = Some(expr.into_token_stream());
                     } else {
-                        default = None;
-                        implicit_default = true;
+                        data.default = None;
+                        data.implicit_default = true;
                     }
                 }
                 // lenient
-                ParsedFieldAttribute::Lenient => Self::parse_and_set_bool(&mut lenient, ident)?,
+                ParsedFieldAttribute::Lenient => Self::parse_and_set_bool(&mut data.lenient, ident)?,
                 // name = "x"
                 ParsedFieldAttribute::Name => {
-                    if field_name.is_some() {
+                    if data.field_name.is_some() {
                         return Err(duplicate_attribute_error(ident));
                     }
                     let value = meta.value()?;
                     let lit = value.parse::<LitStr>()?;
-                    field_name = Some(lit.value());
+                    data.field_name = Some(lit.value());
                 }
                 // skip
-                ParsedFieldAttribute::Skip => Self::parse_and_set_bool(&mut skipped, ident)?,
+                ParsedFieldAttribute::Skip => Self::parse_and_set_bool(&mut data.skipped, ident)?,
                 // flatten
-                ParsedFieldAttribute::Flatten => Self::parse_and_set_bool(&mut flatten, ident)?,
+                ParsedFieldAttribute::Flatten => Self::parse_and_set_bool(&mut data.flatten, ident)?,
                 // validate
                 ParsedFieldAttribute::Validate => {
                     let path: Path = meta.value()?.parse()?;
-                    encode_modifiers.push(EncodeModifier::Validate(path.clone()));
-                    decode_modifiers.push(DecodeModifier::Validate(path));
+                    data.encode_modifiers.push(EncodeModifier::Validate(path.clone()));
+                    data.decode_modifiers.push(DecodeModifier::Validate(path));
                 }
                 // as
                 ParsedFieldAttribute::As => {
                     let ty: Type = meta.value()?.parse()?;
-                    final_type = Some(ty);
+                    data.final_type = Some(ty);
                 }
             }
             Ok(())
         })?;
 
-        if skipped {
-            if field_name.is_some() || lenient || flatten {
+        self.validate_parsed_attribute_data(transparent, data)
+    }
+
+    fn validate_parsed_attribute_data(self, transparent: bool, data: ParsedFieldAttributeData) -> Result<FieldData, Error> {
+        if data.skipped {
+            if data.field_name.is_some() || data.lenient || data.flatten {
                 return Err(Error::new_spanned(
                     self.access(),
                     "Cannot specify this attribute for a skipped field",
@@ -246,27 +264,27 @@ impl<'a> ParsedField<'a> {
             }
             // Default to using the Default trait if no specific default value is given.
             return Ok(FieldData::Skipped {
-                default: default.unwrap_or_else(|| quote! { Default::default() }),
+                default: data.default.unwrap_or_else(|| quote! { Default::default() }),
             });
         }
 
-        if flatten && (default.is_some() || implicit_default) {
+        if data.flatten && (data.default.is_some() || data.implicit_default) {
             return Err(Error::new_spanned(
                 self.access(),
                 "Cannot use `flatten` and `default` attributes together",
             ));
         }
 
-        if flatten && (!encode_modifiers.is_empty() || !decode_modifiers.is_empty()) {
+        if data.flatten && (!data.encode_modifiers.is_empty() || !data.decode_modifiers.is_empty()) {
             return Err(Error::new_spanned(
                 self.access(),
                 "Cannot use `flatten` with functional field attributes",
             ));
         }
 
-        if final_type.is_none()
-            && (!encode_modifiers.iter().all(EncodeModifier::is_validate)
-                || !decode_modifiers.iter().all(DecodeModifier::is_validate))
+        if data.final_type.is_none()
+            && (!data.encode_modifiers.iter().all(EncodeModifier::is_validate)
+            || !data.decode_modifiers.iter().all(DecodeModifier::is_validate))
         {
             return Err(Error::new_spanned(
                 self.access(),
@@ -275,10 +293,11 @@ impl<'a> ParsedField<'a> {
         }
 
         let name = if transparent {
-            Some("".to_string())
+            Some(String::new())
         } else {
-            field_name.or_else(|| self.named_ident().map(ToString::to_string))
+            data.field_name.or_else(|| self.named_ident().map(ToString::to_string))
         };
+
         name.map_or_else(
             || {
                 Err(Error::new_spanned(
@@ -287,17 +306,23 @@ impl<'a> ParsedField<'a> {
                 ))
             },
             |name| {
-                Ok(FieldData::Present(PresentFieldData {
-                    name,
-                    lenient,
-                    default,
-                    implicit_default,
-                    flatten,
-                    encode_modifiers,
-                    decode_modifiers,
-                    final_type,
-                    transparent,
-                }))
+                Ok(
+                    FieldData::Present(
+                        Box::new(
+                            PresentFieldData {
+                                name,
+                                lenient: data.lenient,
+                                default: data.default,
+                                implicit_default: data.implicit_default,
+                                flatten: data.flatten,
+                                encode_modifiers: data.encode_modifiers,
+                                decode_modifiers: data.decode_modifiers,
+                                final_type: data.final_type,
+                                transparent,
+                            }
+                        )
+                    )
+                )
             },
         )
     }
