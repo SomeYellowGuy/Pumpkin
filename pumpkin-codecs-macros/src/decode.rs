@@ -278,8 +278,8 @@ pub enum DecodeModifier {
 }
 
 impl DecodeModifier {
-    pub fn is_validate(&self) -> bool {
-        matches!(self, DecodeModifier::Validate(_))
+    pub const fn is_validate(&self) -> bool {
+        matches!(self, Self::Validate(_))
     }
 }
 
@@ -290,7 +290,7 @@ impl DecodeModifier {
         ident: &Ident,
     ) -> proc_macro2::TokenStream {
         match self {
-            DecodeModifier::Validate(p) => quote! {
+            Self::Validate(p) => quote! {
                 let #ident = #codecs_crate::DataResult::flat_map(#ident, |r| #p(&r).map_or_else(#codecs_crate::DataResult::new_error, |()| #codecs_crate::DataResult::new_success(r)));
             },
         }
@@ -380,7 +380,7 @@ fn decode_field_tokens(
     let ident = field.named_ident();
     match field.generate_field_data(transparent)? {
         FieldData::Present(data) => {
-            decode_from_field_data(codecs_crate, field, data, counter, ident)
+            decode_from_field_data(codecs_crate, field, *data, counter, ident)
         }
         FieldData::Skipped { default } => {
             let default_tokens =
