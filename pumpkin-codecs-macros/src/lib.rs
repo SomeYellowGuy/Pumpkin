@@ -35,7 +35,7 @@
 //!   - `"camelCase"`
 //! - `transparent`: Only for structs. If a struct has exactly 1 field, instead of encoding to/decoding a map, the struct
 //!   will be represented by how that field's value is represented as well. If this attribute is used, no naming
-//!   of the single field is required, and it will be ignored.
+//!   of the single field is required, and it will be ignored. Obviously, this cannot be used with `flatten`.
 //!
 //! ## Enum Variant Attributes
 //! - `tag = "x"`: Tells the value for storing the enum's type. This is used to differentiate the variant
