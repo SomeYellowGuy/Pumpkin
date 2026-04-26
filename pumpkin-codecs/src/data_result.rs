@@ -621,6 +621,29 @@ macro_rules! assert_success {
     }};
 }
 
+/// Asserts that encoding the left expression will lead to a `DataResult` whose provided method returns `true`.
+///
+/// # Parameters
+///
+/// - `input`: The value to encode.
+/// - `ops`: The `DynamicOps` to use to encode (without the `&`).
+/// - `func`: The provided `DataResult` value that should return `true`.
+#[macro_export]
+macro_rules! assert_encode {
+    ($left:expr, $ops:expr, $func:ident $(,)?) => {{
+        let result = $crate::codec::Encode::encode_start(&$left, &$ops);
+        assert!(
+            result.$func(),
+            concat!(
+                "Expected a `DataResult` that returns `true` for ",
+                stringify!($func),
+                ", got: {:?}"
+            ),
+            result
+        );
+    }};
+}
+
 /// Asserts that encoding the left expression will lead to a complete result (success) whose stored result is `$right`.
 ///
 /// # Parameters

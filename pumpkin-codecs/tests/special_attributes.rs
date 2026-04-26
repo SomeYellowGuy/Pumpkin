@@ -1,5 +1,7 @@
 use pumpkin_codecs::json_ops::JsonOps;
-use pumpkin_codecs::{assert_decode, assert_decode_success, assert_encode_success, Encode, Decode};
+use pumpkin_codecs::{
+    assert_decode, assert_decode_success, assert_encode, assert_encode_success,
+};
 use pumpkin_codecs_macros::{Decode, Encode};
 use serde_json::json;
 
@@ -8,7 +10,7 @@ fn flatten() {
     #[derive(Debug, Copy, Clone, PartialEq, Eq, Encode, Decode)]
     pub struct Section {
         from: u64,
-        to: u64
+        to: u64,
     }
 
     #[derive(Debug, Copy, Clone, PartialEq, Eq, Encode, Decode)]
@@ -17,19 +19,19 @@ fn flatten() {
         FontSize {
             #[codec(flatten)]
             at: Section,
-            size: u32
+            size: u32,
         },
         #[codec(tag = "italic")]
         Italic {
             #[codec(flatten)]
             at: Section,
-            state: bool
+            state: bool,
         },
         #[codec(tag = "delete")]
         Delete {
             #[codec(flatten)]
-            at: Section
-        }
+            at: Section,
+        },
     }
 
     assert_encode_success!(
@@ -68,7 +70,9 @@ fn flatten() {
             "to": 51
         }),
         JsonOps,
-        TextChange::Delete { at: Section { from: 45, to: 51 } }
+        TextChange::Delete {
+            at: Section { from: 45, to: 51 }
+        }
     );
 
     assert_decode!(
@@ -85,6 +89,19 @@ fn flatten() {
 }
 
 #[test]
+fn transparent() {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Encode, Decode)]
+    #[codec(transparent)]
+    struct BoolWrapper(#[codec()] bool);
+
+    assert_encode_success!(BoolWrapper(true), JsonOps, json!(true));
+    assert_encode_success!(BoolWrapper(false), JsonOps, json!(false));
+
+    assert_decode_success!(BoolWrapper, json!(true), JsonOps, BoolWrapper(true));
+    assert_decode_success!(BoolWrapper, json!(false), JsonOps, BoolWrapper(false));
+}
+
+#[test]
 fn validate() {
     fn range(value: &i32) -> Result<(), &str> {
         if value >= &1 && value <= &10 {
@@ -95,12 +112,21 @@ fn validate() {
     }
 
     #[derive(Debug, PartialEq, Eq, Encode, Decode)]
-    struct LimitedI32(
-        #[codec(name = "value", default = 2, validate = range)] i32
-    );
+    struct LimitedI32(#[codec(name = "value", default = 2, validate = range)] i32);
 
     assert_encode_success!(LimitedI32(1), JsonOps, json!({"value": 1}));
-    assert_encode_success!(LimitedI32(2), JsonOps, json!({"value": 2}));
+    assert_encode_success!(LimitedI32(2), JsonOps, json!({}));
     assert_encode_success!(LimitedI32(3), JsonOps, json!({"value": 3}));
-    assert_encode_success!(LimitedI32(11), JsonOps, json!({"value": 3}));
+    assert_encode!(LimitedI32(0), JsonOps, is_error);
+    assert_encode!(LimitedI32(11), JsonOps, is_error);
+
+    assert_decode_success!(LimitedI32, json!({"value": 5}), JsonOps, LimitedI32(5));
+    assert_decode_success!(LimitedI32, json!({"value": 7}), JsonOps, LimitedI32(7));
+    assert_decode_success!(LimitedI32, json!({"value": 4}), JsonOps, LimitedI32(4));
+
+    assert_decode_success!(LimitedI32, json!({"value": 2}), JsonOps, LimitedI32(2));
+    assert_decode_success!(LimitedI32, json!({}), JsonOps, LimitedI32(2));
+
+    assert_decode!(LimitedI32, json!({"value": -1}), JsonOps, is_error);
+    assert_decode!(LimitedI32, json!({"value": 13}), JsonOps, is_error);
 }
