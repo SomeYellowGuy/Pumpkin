@@ -1,6 +1,7 @@
 use crate::field::{FieldData, FieldKind, ParsedField, PresentFieldData};
 use crate::{
-    parse_enum_dispatch_attributes, parse_enum_variant_attributes, parse_struct_dispatch_attributes,
+    DispatchData, parse_enum_dispatch_attributes, parse_enum_variant_attributes,
+    parse_struct_dispatch_attributes,
 };
 use proc_macro::TokenStream;
 use proc_macro_error2::__export::proc_macro2;
@@ -58,7 +59,7 @@ fn derive_struct_encode(
     }
     let dispatch_data = parse_struct_dispatch_attributes(attrs)?;
     let variant_encode =
-        derive_single_variant_encode(codecs_crate, &data.fields, dispatch_data.transparent);
+        derive_single_variant_encode(codecs_crate, &data.fields, &(&dispatch_data).into());
     let encode_impl = encode_delegate_impl(name, codecs_crate);
     if dispatch_data.transparent {
         Ok(
@@ -92,6 +93,9 @@ fn derive_enum_encode(
     data: &DataEnum,
     attrs: &[Attribute],
 ) -> Result<TokenStream, Error> {
+    let dispatch_data = parse_enum_dispatch_attributes(attrs)?;
+    let shared = &(&dispatch_data).into();
+
     // Add a special case for all variants being unit variants.
     if data
         .variants
@@ -102,7 +106,7 @@ fn derive_enum_encode(
         let mut match_arms = Vec::new();
         for variant in &data.variants {
             let ident = &variant.ident;
-            let ty = parse_enum_variant_attributes(&variant.ident, &variant.attrs)?;
+            let ty = parse_enum_variant_attributes(&variant.ident, &variant.attrs, shared)?;
             let ty_lit = LitStr::new(&ty, Span::call_site());
             match_arms.push(quote! {
                 Self::#ident => #ty_lit
@@ -119,13 +123,11 @@ fn derive_enum_encode(
             }.into()
         );
     }
-
-    let dispatch_data = parse_enum_dispatch_attributes(attrs)?;
     let tag_key_lit = LitStr::new(&dispatch_data.tag_key, Span::call_site());
 
     let mut match_arms = Vec::new();
     for variant in &data.variants {
-        let ty = parse_enum_variant_attributes(&variant.ident, &variant.attrs)?;
+        let ty = parse_enum_variant_attributes(&variant.ident, &variant.attrs, shared)?;
         let ty_lit = LitStr::new(&ty, Span::call_site());
 
         let fields: Vec<_> = variant
@@ -156,7 +158,7 @@ fn derive_enum_encode(
                     quote! { #ident }
                 }
             },
-            false,
+            &(&dispatch_data).into(),
         );
         match_arms.push(quote! {
             Self::#ident #mat => {
@@ -188,7 +190,7 @@ fn derive_enum_encode(
 fn derive_single_variant_encode(
     codecs_crate: &proc_macro2::TokenStream,
     fields: &Fields,
-    transparent: bool,
+    shared_dispatch_data: &DispatchData,
 ) -> proc_macro2::TokenStream {
     derive_single_variant_builder_encode(
         codecs_crate,
@@ -197,7 +199,7 @@ fn derive_single_variant_encode(
             let access = f.access();
             quote! { &self. #access }
         },
-        transparent,
+        shared_dispatch_data,
     )
 }
 
@@ -206,12 +208,19 @@ fn derive_single_variant_builder_encode(
     codecs_crate: &proc_macro2::TokenStream,
     fields: &Fields,
     access_fn: impl Fn(&ParsedField) -> proc_macro2::TokenStream,
-    transparent: bool,
+    shared_dispatch_data: &DispatchData,
 ) -> proc_macro2::TokenStream {
     let mut builder_encodes = Vec::new();
+    if shared_dispatch_data.transparent && fields.len() != 1 {
+        return Error::new(
+            Span::call_site(),
+            "A struct with the `transparent` attribute can only have 1 field",
+        )
+        .to_compile_error();
+    }
     for (index, field) in fields.iter().enumerate() {
         let field = ParsedField::from_field(field, index);
-        match encode_field_tokens(codecs_crate, field, &access_fn, transparent) {
+        match encode_field_tokens(codecs_crate, field, &access_fn, shared_dispatch_data) {
             Ok(EncodeFieldData { builder_encode }) => {
                 builder_encodes.push(builder_encode);
             }
@@ -250,11 +259,16 @@ fn encode_field_tokens(
     codecs_crate: &proc_macro2::TokenStream,
     field: ParsedField,
     access_fn: impl Fn(&ParsedField) -> proc_macro2::TokenStream,
-    transparent: bool,
+    shared_dispatch_data: &DispatchData,
 ) -> Result<EncodeFieldData, Error> {
-    let data = field.generate_field_data(transparent)?;
+    let data = field.generate_field_data(shared_dispatch_data.transparent)?;
     match data {
-        FieldData::Present(data) => Ok(encode_from_field_data(codecs_crate, field, *data, access_fn)),
+        FieldData::Present(data) => Ok(encode_from_field_data(
+            codecs_crate,
+            field,
+            *data,
+            access_fn,
+        )),
         FieldData::Skipped { .. } => Ok(EncodeFieldData {
             builder_encode: None,
         }),
