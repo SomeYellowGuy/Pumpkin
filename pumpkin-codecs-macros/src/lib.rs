@@ -17,10 +17,8 @@
 //!   This cannot be used with `default` and functional field attributes (given later).
 //!
 //! ### Functional Field Attributes
-//! The order of these attributes matters because transformations are applied simultaneously. The ones specified first
+//! The order of these attributes matters because transformations are applied sequentially. The ones specified first
 //! are applied first.
-//!
-//! *Note:* For optional and defaulted fields, the **field's type** is optional, not the resulting type.
 //!
 //! - `validate = "func"`: Validates a field's value before encoding and/or after decoding. The `func`'s signature must be `(&T) -> Result<(), S>`,
 //!   where `S: Into<String>`. Two common types of `S` are `String` and `&str`.
@@ -35,6 +33,8 @@
 //!   - `"snake_case"`
 //!   - `"PascalCase"`
 //!   - `"camelCase"`
+//! - `transparent`: Only for structs. If a struct has exactly 1 field, instead of encoding to/decoding a map, the struct
+//!   will be represented by how that field's value is represented as well.
 //!
 //! ## Enum Variant Attributes
 //! - `tag = "x"`: Tells the value for storing the enum's type. This is used to differentiate the variant
@@ -128,6 +128,38 @@ fn parse_enum_dispatch_attributes(attributes: &[Attribute]) -> Result<EnumDispat
     })?;
     let tag_key = tag_key.unwrap_or("type".to_string());
     Ok(EnumDispatchData { tag_key })
+}
+
+struct StructDispatchData {
+    transparent: bool,
+}
+
+fn parse_struct_dispatch_attributes(attributes: &[Attribute]) -> Result<StructDispatchData, Error> {
+    enum StructDispatchAttribute {
+        Transparent,
+    }
+
+    impl ParsedAttribute for StructDispatchAttribute {
+        fn from_path(path: &Path) -> Option<Self> {
+            add_attribute_branch!(path, "transparent", Transparent);
+            None
+        }
+    }
+
+    let mut transparent = false;
+    StructDispatchAttribute::parse_attributes(attributes, |attribute, _, ident| {
+        match attribute {
+            // tag_key = "x"
+            StructDispatchAttribute::Transparent => {
+                if transparent {
+                    return Err(duplicate_attribute_error(ident));
+                }
+                transparent = true;
+            }
+        }
+        Ok(())
+    })?;
+    Ok(StructDispatchData { transparent })
 }
 
 fn parse_enum_variant_attributes(ident: &Ident, attributes: &[Attribute]) -> Result<String, Error> {
