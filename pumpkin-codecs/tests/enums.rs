@@ -7,19 +7,12 @@ use serde_json::json;
 fn string_represented() {
     #[derive(Debug, Copy, Clone, PartialEq, Eq, Encode, Decode)]
     pub enum Weekday {
-        #[codec(tag = "sunday")]
         Sunday,
-        #[codec(tag = "monday")]
         Monday,
-        #[codec(tag = "tuesday")]
         Tuesday,
-        #[codec(tag = "wednesday")]
         Wednesday,
-        #[codec(tag = "thursday")]
         Thursday,
-        #[codec(tag = "friday")]
         Friday,
-        #[codec(tag = "saturday")]
         Saturday,
     }
 
@@ -38,11 +31,8 @@ fn string_represented() {
 fn simple() {
     #[derive(Debug, Copy, Clone, PartialEq, Eq, Encode, Decode)]
     pub enum Shape {
-        #[codec(tag = "rectangle")]
         Rectangle { width: u64, height: u64 },
-        #[codec(tag = "circle")]
         Circle { radius: u32 },
-        #[codec(tag = "triangle")]
         Triangle { base: u32, height: u32 },
     }
 

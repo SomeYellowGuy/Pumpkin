@@ -10,6 +10,8 @@ proc-macro = true
 
 [dependencies]
 
+heck.workspace = true
+
 proc-macro-error2.workspace = true
 proc-macro-crate.workspace = true
 

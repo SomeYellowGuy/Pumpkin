@@ -1,7 +1,5 @@
 use pumpkin_codecs::json_ops::JsonOps;
-use pumpkin_codecs::{
-    assert_decode, assert_decode_success, assert_encode, assert_encode_success,
-};
+use pumpkin_codecs::{assert_decode, assert_decode_success, assert_encode, assert_encode_success};
 use pumpkin_codecs_macros::{Decode, Encode};
 use serde_json::json;
 
@@ -92,7 +90,7 @@ fn flatten() {
 fn transparent() {
     #[derive(Debug, Copy, Clone, PartialEq, Eq, Encode, Decode)]
     #[codec(transparent)]
-    struct BoolWrapper(#[codec()] bool);
+    struct BoolWrapper(bool);
 
     assert_encode_success!(BoolWrapper(true), JsonOps, json!(true));
     assert_encode_success!(BoolWrapper(false), JsonOps, json!(false));
@@ -104,7 +102,7 @@ fn transparent() {
 #[test]
 fn validate() {
     fn range(value: &i32) -> Result<(), &str> {
-        if value >= &1 && value <= &10 {
+        if (&1..=&10).contains(&value) {
             Ok(())
         } else {
             Err("Value must be in the interval [1, 10]")
@@ -129,4 +127,31 @@ fn validate() {
 
     assert_decode!(LimitedI32, json!({"value": -1}), JsonOps, is_error);
     assert_decode!(LimitedI32, json!({"value": 13}), JsonOps, is_error);
+}
+
+#[test]
+fn rename_all() {
+    #[derive(Debug, PartialEq, Eq, Encode, Decode)]
+    // The tags for each variant are uppercase (except for green)
+    #[codec(rename_all = "UPPERCASE")]
+    enum RainbowColor {
+        Red,
+        Orange,
+        Yellow,
+        #[codec(tag = "green")]
+        Green,
+        Blue,
+        Indigo,
+        Violet
+    }
+
+    assert_encode_success!(RainbowColor::Red, JsonOps, json!("RED"));
+    assert_encode_success!(RainbowColor::Yellow, JsonOps, json!("YELLOW"));
+    assert_encode_success!(RainbowColor::Green, JsonOps, json!("green"));
+
+    assert_decode_success!(RainbowColor, json!("INDIGO"), JsonOps, RainbowColor::Indigo);
+    assert_decode_success!(RainbowColor, json!("BLUE"), JsonOps, RainbowColor::Blue);
+    assert_decode_success!(RainbowColor, json!("green"), JsonOps, RainbowColor::Green);
+    assert_decode!(RainbowColor, json!("GREEN"), JsonOps, is_error);
+    assert_decode!(RainbowColor, json!("violet"), JsonOps, is_error);
 }

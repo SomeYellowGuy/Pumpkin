@@ -1,6 +1,7 @@
 use crate::field::{FieldData, FieldKind, ParsedField, PresentFieldData};
 use crate::{
-    parse_enum_dispatch_attributes, parse_enum_variant_attributes, parse_struct_dispatch_attributes,
+    DispatchData, parse_enum_dispatch_attributes, parse_enum_variant_attributes,
+    parse_struct_dispatch_attributes,
 };
 use proc_macro::TokenStream;
 use proc_macro_error2::__export::proc_macro2;
@@ -72,7 +73,7 @@ fn derive_struct_decode(
         name,
         &data.fields,
         &quote! { Self },
-        dispatch_data.transparent,
+        &(&dispatch_data).into(),
     );
 
     let decode_impl = decode_delegate_impl(name, codecs_crate);
@@ -109,6 +110,8 @@ fn derive_enum_decode(
     data: &DataEnum,
     attrs: &[Attribute],
 ) -> Result<TokenStream, Error> {
+    let dispatch_data = parse_enum_dispatch_attributes(attrs)?;
+
     // Add a special case for all variants being unit variants.
     if data
         .variants
@@ -118,7 +121,7 @@ fn derive_enum_decode(
         let mut match_arms = Vec::new();
         for variant in &data.variants {
             let ident = &variant.ident;
-            let ty = parse_enum_variant_attributes(&variant.ident, &variant.attrs)?;
+            let ty = parse_enum_variant_attributes(&variant.ident, &variant.attrs, &(&dispatch_data).into())?;
             let ty_lit = LitStr::new(&ty, Span::call_site());
             match_arms.push(quote! {
                 #ty_lit => #codecs_crate::DataResult::new_success((Self::#ident, p))
@@ -141,12 +144,11 @@ fn derive_enum_decode(
         );
     }
 
-    let dispatch_data = parse_enum_dispatch_attributes(attrs)?;
     let tag_key_lit = LitStr::new(&dispatch_data.tag_key, Span::call_site());
     let mut match_arms = Vec::new();
     for variant in &data.variants {
         // Try to get the variant's differentiator value first.
-        let ty = parse_enum_variant_attributes(&variant.ident, &variant.attrs)?;
+        let ty = parse_enum_variant_attributes(&variant.ident, &variant.attrs, &(&dispatch_data).into())?;
         let ty_lit = LitStr::new(&ty, Span::call_site());
         let ident = &variant.ident;
         let qualified_variant_ident = quote! { Self::#ident };
@@ -158,7 +160,7 @@ fn derive_enum_decode(
                 name,
                 &variant.fields,
                 &qualified_variant_ident,
-                false,
+                &(&dispatch_data).into(),
             )
         };
         match_arms.push(quote! {
@@ -196,8 +198,16 @@ fn derive_single_variant_decode(
     variant_ident: &Ident,
     fields: &Fields,
     variant_tokens: &proc_macro2::TokenStream,
-    transparent: bool,
+    shared_dispatch_data: &DispatchData,
 ) -> proc_macro2::TokenStream {
+    if shared_dispatch_data.transparent && fields.len() != 1 {
+        return Error::new(
+            Span::call_site(),
+            "A struct with the `transparent` attribute can only have 1 field",
+        )
+        .to_compile_error();
+    }
+
     let mut builder_decodes = Vec::new();
     // The counted encoded values.
     let mut counter = 0;
@@ -205,7 +215,7 @@ fn derive_single_variant_decode(
     let mut field_outputs = Vec::new();
     for (index, field) in fields.iter().enumerate() {
         let field = ParsedField::from_field(field, index);
-        match decode_field_tokens(codecs_crate, field, &mut counter, transparent) {
+        match decode_field_tokens(codecs_crate, field, &mut counter, shared_dispatch_data) {
             Ok(DecodeFieldData {
                 builder_decode,
                 field_input,
@@ -228,7 +238,7 @@ fn derive_single_variant_decode(
         return Error::new_spanned(variant_ident, "No more than 16 fields may be decoded")
             .to_compile_error();
     }
-    let constructor_tokens = if transparent {
+    let constructor_tokens = if shared_dispatch_data.transparent {
         match fields {
             Fields::Named(_) => quote! {
                 |a| (#variant_tokens {a}, #codecs_crate::DynamicOps::empty(ops))
@@ -375,10 +385,10 @@ fn decode_field_tokens(
     codecs_crate: &proc_macro2::TokenStream,
     field: ParsedField,
     counter: &mut usize,
-    transparent: bool,
+    shared_dispatch_data: &DispatchData,
 ) -> Result<DecodeFieldData, Error> {
     let ident = field.named_ident();
-    match field.generate_field_data(transparent)? {
+    match field.generate_field_data(shared_dispatch_data.transparent)? {
         FieldData::Present(data) => {
             decode_from_field_data(codecs_crate, field, *data, counter, ident)
         }

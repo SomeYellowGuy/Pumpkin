@@ -2874,6 +2874,7 @@ dependencies = [
 name = "pumpkin-codecs-macros"
 version = "0.1.0-dev+26.1"
 dependencies = [
+ "heck",
  "proc-macro-crate",
  "proc-macro-error2",
  "quote",

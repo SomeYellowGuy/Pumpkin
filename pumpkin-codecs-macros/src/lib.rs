@@ -8,7 +8,7 @@
 //! - `skip`: Skips serializing the field entirely, and instead uses the value provided by `default`, if any.
 //!   In this case, `default` is *optional*, and if it is not specified, this falls back to `Default::default()`.
 //! - `name = "x"`: Sets this field to be encoded with the key `"x"`. If not specified, the field's name
-//!   defaults to the Rust field's name.
+//!   defaults to the Rust field's name. This is usually required for tuple fields.
 //! - `default` or `default = ...`: Sets a default value for a field. If no value is specified, it defaults to `Default::default()`.
 //!   This is used for skipped fields and encoding *defaulted* fields.
 //! - `lenient`: Only for encoding `Option`s and defaulted fields. If a value is present and cannot be successfully decoded,
@@ -26,19 +26,21 @@
 //! ## Struct/Enum Body Attributes
 //! - `tag_key = "x"` on `enum`s: Tells the key for storing the enum's type. This is used to differentiate the variant
 //!   during decoding. If omitted, this defaults to `"type"`.
-//! - `rename_all = "x"`: (TODO) Changes the tags of all enum variants, whose tag is not overridden already, to be of a certain case's
+//! - `rename_all = "x"`: Changes the tags of all enum variants, whose tag is not overridden already, to be of a certain case's
 //!   version of the variant's name. The valid options are:
-//!   - `"upper_case"`
+//!   - `"UPPERCASE"`
 //!   - `"lowercase"`
 //!   - `"snake_case"`
 //!   - `"PascalCase"`
 //!   - `"camelCase"`
 //! - `transparent`: Only for structs. If a struct has exactly 1 field, instead of encoding to/decoding a map, the struct
-//!   will be represented by how that field's value is represented as well.
+//!   will be represented by how that field's value is represented as well. If this attribute is used, no naming
+//!   of the single field is required, and it will be ignored.
 //!
 //! ## Enum Variant Attributes
 //! - `tag = "x"`: Tells the value for storing the enum's type. This is used to differentiate the variant
-//!   during decoding.
+//!   during decoding. If not specified, defaults to using the `snake_case` version of the variant's name
+//!   (or whatever the `rename_all` attribute says)
 
 mod attribute;
 mod decode;
@@ -46,6 +48,7 @@ mod encode;
 mod field;
 
 use crate::attribute::{ParsedAttribute, add_attribute_branch};
+use heck::{ToLowerCamelCase, ToPascalCase, ToSnakeCase};
 use proc_macro::TokenStream;
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro_error2::__export::proc_macro2;
@@ -88,8 +91,52 @@ pub fn derive_decode(input: TokenStream) -> TokenStream {
     decode::derive_decode(&crate_token(), &input).unwrap_or_else(|e| e.to_compile_error().into())
 }
 
+#[derive(Debug, Copy, Clone)]
+enum RenameAllOption {
+    None,
+    UpperCase,
+    LowerCase,
+    SnakeCase,
+    PascalCase,
+    CamelCase,
+}
+
+impl RenameAllOption {
+    pub fn apply(self, name: &str) -> String {
+        match self {
+            // Default to snake case.
+            Self::None => Self::SnakeCase.apply(name),
+
+            Self::UpperCase => name.to_uppercase(),
+            Self::LowerCase => name.to_lowercase(),
+            Self::SnakeCase => name.to_snake_case(),
+            Self::PascalCase => name.to_pascal_case(),
+            Self::CamelCase => name.to_lower_camel_case(),
+        }
+    }
+}
+
+impl TryFrom<&LitStr> for RenameAllOption {
+    type Error = Error;
+
+    fn try_from(value: &LitStr) -> Result<Self, Self::Error> {
+        match value.value().as_str() {
+            "lowercase" => Ok(Self::LowerCase),
+            "UPPERCASE" => Ok(Self::UpperCase),
+            "snake_case" => Ok(Self::SnakeCase),
+            "PascalCase" => Ok(Self::PascalCase),
+            "camelCase" => Ok(Self::CamelCase),
+            s => Err(Error::new(
+                value.span(),
+                format!("Invalid `rename_all` option: {s}"),
+            )),
+        }
+    }
+}
+
 struct EnumDispatchData {
     tag_key: String,
+    rename_all: RenameAllOption,
 }
 
 fn duplicate_attribute_error(ident: &Ident) -> Error {
@@ -99,19 +146,45 @@ fn duplicate_attribute_error(ident: &Ident) -> Error {
     )
 }
 
+struct DispatchData {
+    transparent: bool,
+    rename_all: RenameAllOption,
+}
+
+impl From<&EnumDispatchData> for DispatchData {
+    fn from(data: &EnumDispatchData) -> Self {
+        Self {
+            transparent: false,
+            rename_all: data.rename_all,
+        }
+    }
+}
+
+impl From<&StructDispatchData> for DispatchData {
+    fn from(data: &StructDispatchData) -> Self {
+        Self {
+            transparent: data.transparent,
+            rename_all: RenameAllOption::None,
+        }
+    }
+}
+
 fn parse_enum_dispatch_attributes(attributes: &[Attribute]) -> Result<EnumDispatchData, Error> {
     enum EnumDispatchAttribute {
         TagKey,
+        RenameAll,
     }
 
     impl ParsedAttribute for EnumDispatchAttribute {
         fn from_path(path: &Path) -> Option<Self> {
             add_attribute_branch!(path, "tag_key", TagKey);
+            add_attribute_branch!(path, "rename_all", RenameAll);
             None
         }
     }
 
     let mut tag_key = None;
+    let mut rename_all = RenameAllOption::None;
     EnumDispatchAttribute::parse_attributes(attributes, |attribute, meta, ident| {
         match attribute {
             // tag_key = "x"
@@ -123,11 +196,22 @@ fn parse_enum_dispatch_attributes(attributes: &[Attribute]) -> Result<EnumDispat
                 let lit = value.parse::<LitStr>()?;
                 tag_key = Some(lit.value());
             }
+            EnumDispatchAttribute::RenameAll => {
+                if tag_key.is_some() {
+                    return Err(duplicate_attribute_error(ident));
+                }
+                let value = meta.value()?;
+                let lit = value.parse::<LitStr>()?;
+                rename_all = RenameAllOption::try_from(&lit)?;
+            }
         }
         Ok(())
     })?;
     let tag_key = tag_key.unwrap_or("type".to_string());
-    Ok(EnumDispatchData { tag_key })
+    Ok(EnumDispatchData {
+        tag_key,
+        rename_all,
+    })
 }
 
 struct StructDispatchData {
@@ -162,7 +246,7 @@ fn parse_struct_dispatch_attributes(attributes: &[Attribute]) -> Result<StructDi
     Ok(StructDispatchData { transparent })
 }
 
-fn parse_enum_variant_attributes(ident: &Ident, attributes: &[Attribute]) -> Result<String, Error> {
+fn parse_enum_variant_attributes(ident: &Ident, attributes: &[Attribute], shared_dispatch_data: &DispatchData) -> Result<String, Error> {
     enum EnumVariantAttribute {
         Tag,
     }
@@ -189,14 +273,8 @@ fn parse_enum_variant_attributes(ident: &Ident, attributes: &[Attribute]) -> Res
         }
         Ok(())
     })?;
-    ty.map_or_else(
-        || {
-            Err(Error::new_spanned(
-                ident,
-                "The `tag` attribute was not found",
-            ))
-        },
-        Ok,
+    Ok(
+        ty.unwrap_or_else(|| shared_dispatch_data.rename_all.apply(&ident.to_string()))
     )
 }
 
