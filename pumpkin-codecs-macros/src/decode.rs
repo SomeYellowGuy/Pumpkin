@@ -121,7 +121,11 @@ fn derive_enum_decode(
         let mut match_arms = Vec::new();
         for variant in &data.variants {
             let ident = &variant.ident;
-            let ty = parse_enum_variant_attributes(&variant.ident, &variant.attrs, &(&dispatch_data).into())?;
+            let ty = parse_enum_variant_attributes(
+                &variant.ident,
+                &variant.attrs,
+                &(&dispatch_data).into(),
+            )?;
             let ty_lit = LitStr::new(&ty, Span::call_site());
             match_arms.push(quote! {
                 #ty_lit => #codecs_crate::DataResult::new_success((Self::#ident, p))
@@ -148,7 +152,11 @@ fn derive_enum_decode(
     let mut match_arms = Vec::new();
     for variant in &data.variants {
         // Try to get the variant's differentiator value first.
-        let ty = parse_enum_variant_attributes(&variant.ident, &variant.attrs, &(&dispatch_data).into())?;
+        let ty = parse_enum_variant_attributes(
+            &variant.ident,
+            &variant.attrs,
+            &(&dispatch_data).into(),
+        )?;
         let ty_lit = LitStr::new(&ty, Span::call_site());
         let ident = &variant.ident;
         let qualified_variant_ident = quote! { Self::#ident };

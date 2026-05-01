@@ -246,7 +246,11 @@ fn parse_struct_dispatch_attributes(attributes: &[Attribute]) -> Result<StructDi
     Ok(StructDispatchData { transparent })
 }
 
-fn parse_enum_variant_attributes(ident: &Ident, attributes: &[Attribute], shared_dispatch_data: &DispatchData) -> Result<String, Error> {
+fn parse_enum_variant_attributes(
+    ident: &Ident,
+    attributes: &[Attribute],
+    shared_dispatch_data: &DispatchData,
+) -> Result<String, Error> {
     enum EnumVariantAttribute {
         Tag,
     }
@@ -273,9 +277,7 @@ fn parse_enum_variant_attributes(ident: &Ident, attributes: &[Attribute], shared
         }
         Ok(())
     })?;
-    Ok(
-        ty.unwrap_or_else(|| shared_dispatch_data.rename_all.apply(&ident.to_string()))
-    )
+    Ok(ty.unwrap_or_else(|| shared_dispatch_data.rename_all.apply(&ident.to_string())))
 }
 
 /// Expects an `Option` type, and if it is an `Option`, returns the type of the `Option` in a `Some`.

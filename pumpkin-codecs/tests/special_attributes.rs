@@ -142,7 +142,7 @@ fn rename_all() {
         Green,
         Blue,
         Indigo,
-        Violet
+        Violet,
     }
 
     assert_encode_success!(RainbowColor::Red, JsonOps, json!("RED"));
