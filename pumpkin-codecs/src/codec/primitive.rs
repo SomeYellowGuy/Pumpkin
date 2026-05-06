@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use crate::codec::primitive::sealed::Primitive;
 use crate::{DataResult, Decode, DynamicOps, Encode};
 
@@ -112,6 +113,17 @@ impl Primitive for String {
 
     fn primitive_decode<O: DynamicOps>(ops: &'static O, input: O::Value) -> DataResult<Self> {
         ops.get_string(&input)
+    }
+}
+
+impl Primitive for Cow<'static, str> {
+    fn primitive_encode<O: DynamicOps>(&self, ops: &'static O) -> O::Value {
+        ops.create_string(self)
+    }
+
+    fn primitive_decode<O: DynamicOps>(ops: &'static O, input: O::Value) -> DataResult<Self> {
+        ops.get_string(&input)
+            .map(Cow::Owned)
     }
 }
 
