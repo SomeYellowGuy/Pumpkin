@@ -1,7 +1,5 @@
 use crate::text::color::{ARGBColor, hsv_to_rgb};
-use crate::translation::{
-    Locale, get_translation, get_translation_text, reorder_substitutions, translation_to_pretty,
-};
+use crate::translation::{Locale, get_translation, get_translation_text, reorder_substitutions, translation_to_pretty, get_translation_text_with_fallback};
 use click::ClickEvent;
 use color::Color;
 use colored::Colorize;
@@ -109,6 +107,7 @@ impl TextComponentBase {
                 translate,
                 bedrock_translate: _,
                 with,
+                ..
             } => translation_to_pretty(format!("minecraft:{translate}"), Locale::EnUs, with),
             TextContent::EntityNames {
                 selector,
@@ -182,12 +181,14 @@ impl TextComponentBase {
                 translate,
                 bedrock_translate: _,
                 with,
+                fallback
             } => {
                 // TODO
-                text.push_str(&get_translation_text(
+                text.push_str(&get_translation_text_with_fallback(
                     translate.to_string(),
                     locale,
                     with.clone(),
+                    fallback.as_ref().cloned()
                 ));
             }
             TextContent::EntityNames { selector, .. } => text.push_str(selector),
@@ -223,7 +224,8 @@ impl TextComponentBase {
                 translate,
                 bedrock_translate: _,
                 with,
-            } => get_translation_text(format!("minecraft:{translate}"), locale, with),
+                fallback
+            } => get_translation_text_with_fallback(format!("minecraft:{translate}"), locale, with, fallback),
             TextContent::EntityNames {
                 selector,
                 separator: _,
@@ -394,6 +396,7 @@ impl TextComponent {
                 translate: key.into(),
                 bedrock_translate: None,
                 with: with.into().into_iter().map(|x| x.0).collect(),
+                fallback: None
             }),
             style: Box::new(Style::default()),
             extra: vec![],
@@ -424,6 +427,7 @@ impl TextComponent {
                 translate: java_key.into(),
                 bedrock_translate: Some(bedrock_key.into()),
                 with: with.into().into_iter().map(|x| x.0).collect(),
+                fallback: None
             }),
             style: Box::new(Style::default()),
             extra: vec![],
@@ -1047,6 +1051,8 @@ pub enum TextContent {
         /// Bedrock translation key. If specified, Bedrock clients receive an `SText::translation` packet.
         #[serde(skip, default)]
         bedrock_translate: Option<Cow<'static, str>>,
+        /// The fallback text if a translation could not be found.
+        fallback: Option<Cow<'static, str>>,
         /// Substitution parameters for the translation.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         with: Vec<TextComponentBase>,

@@ -239,14 +239,36 @@ pub fn translation_to_pretty<P: Into<Cow<'static, str>>>(
 ///
 /// # Returns
 /// The resolved translation as plain text.
-pub fn get_translation_text<P: Into<Cow<'static, str>>>(
-    namespaced_key: P,
+pub fn get_translation_text<P1: Into<Cow<'static, str>>>(
+    namespaced_key: P1,
+    locale: Locale,
+    with: Vec<TextComponentBase>
+) -> String {
+    get_translation_text_with_fallback::<P1, P1>(namespaced_key, locale, with, None)
+}
+
+/// Resolves a translation into plain text with an optional fallback value.
+///
+/// # Arguments
+/// * `namespaced_key`: The fully qualified `namespace:key`.
+/// * `locale`: The requested locale.
+/// * `with`: Substitution components used to replace placeholders.
+/// * `fallback`: An optional fallback to use if the translation could not be substituted.
+///
+/// # Returns
+/// The resolved translation as plain text.
+pub fn get_translation_text_with_fallback<P1: Into<Cow<'static, str>>, P2: Into<Cow<'static, str>>>(
+    namespaced_key: P1,
     locale: Locale,
     with: Vec<TextComponentBase>,
+    fallback: Option<P2>
 ) -> String {
     let translation = get_translation(&namespaced_key.into(), locale);
     if with.is_empty() || !translation.contains('%') {
-        return translation;
+        return fallback.map_or_else(
+            || translation.to_string(),
+            |s| s.into().to_string()
+        )
     }
 
     let (substitutions, indices) = reorder_substitutions(&translation, with);
