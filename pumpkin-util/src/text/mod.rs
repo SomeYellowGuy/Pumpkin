@@ -1,10 +1,14 @@
 use crate::text::color::{ARGBColor, hsv_to_rgb};
-use crate::translation::{Locale, get_translation, get_translation_text, reorder_substitutions, translation_to_pretty, get_translation_text_with_fallback};
+use crate::translation::{
+    Locale, get_translation, get_translation_text, get_translation_text_with_fallback,
+    reorder_substitutions, translation_to_pretty,
+};
 use click::ClickEvent;
 use color::Color;
 use colored::Colorize;
 use core::str;
 use hover::HoverEvent;
+use pumpkin_codecs_macros::Encode;
 use pumpkin_nbt::serializer::Serializer;
 use serde::de::{Error, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -17,8 +21,8 @@ use style::Style;
 pub mod click;
 pub mod color;
 pub mod hover;
-pub mod style;
 mod serialization;
+pub mod style;
 
 /// Represents a Minecraft chat component.
 ///
@@ -181,14 +185,14 @@ impl TextComponentBase {
                 translate,
                 bedrock_translate: _,
                 with,
-                fallback
+                fallback,
             } => {
                 // TODO
                 text.push_str(&get_translation_text_with_fallback(
                     translate.to_string(),
                     locale,
                     with.clone(),
-                    fallback.as_ref().cloned()
+                    fallback.as_ref().cloned(),
                 ));
             }
             TextContent::EntityNames { selector, .. } => text.push_str(selector),
@@ -224,8 +228,13 @@ impl TextComponentBase {
                 translate,
                 bedrock_translate: _,
                 with,
-                fallback
-            } => get_translation_text_with_fallback(format!("minecraft:{translate}"), locale, with, fallback),
+                fallback,
+            } => get_translation_text_with_fallback(
+                format!("minecraft:{translate}"),
+                locale,
+                with,
+                fallback,
+            ),
             TextContent::EntityNames {
                 selector,
                 separator: _,
@@ -396,7 +405,7 @@ impl TextComponent {
                 translate: key.into(),
                 bedrock_translate: None,
                 with: with.into().into_iter().map(|x| x.0).collect(),
-                fallback: None
+                fallback: None,
             }),
             style: Box::new(Style::default()),
             extra: vec![],
@@ -427,7 +436,7 @@ impl TextComponent {
                 translate: java_key.into(),
                 bedrock_translate: Some(bedrock_key.into()),
                 with: with.into().into_iter().map(|x| x.0).collect(),
-                fallback: None
+                fallback: None,
             }),
             style: Box::new(Style::default()),
             extra: vec![],

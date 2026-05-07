@@ -2995,6 +2995,7 @@ dependencies = [
  "p384",
  "proc-macro2",
  "pumpkin-codecs",
+ "pumpkin-codecs-macros",
  "pumpkin-nbt",
  "quote",
  "rsa",

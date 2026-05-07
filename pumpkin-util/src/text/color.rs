@@ -1,5 +1,6 @@
 use colored::{ColoredString, Colorize};
 use serde::{Deserialize, Deserializer, Serialize};
+use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode};
 
 /// Text color for chat components.
 ///
@@ -19,6 +20,26 @@ pub enum Color {
     Rgb(RGBColor),
     /// One of the 16 named Minecraft colors.
     Named(NamedColor),
+}
+
+impl Encode for Color {
+    fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
+        let string = match self {
+            Color::Reset => "reset".to_string(),
+            Color::Rgb(c) => format!("#{:06X}", u32::from(*c)),
+            Color::Named(c) => <&str>::from(*c).to_string(),
+        };
+        string.encode(ops, prefix)
+    }
+}
+
+impl Decode for Color {
+    fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
+        String::decode(input, ops)
+            .flat_map(|(s, v)| {
+                Color::parse_from(&s).map(|c| (c, v))
+            })
+    }
 }
 
 /// Converts HSV (Hue, Saturation, Value) color values to RGB.
@@ -162,6 +183,27 @@ impl Color {
         let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
         Some(Self::Rgb(RGBColor::new(r, g, b)))
     }
+
+    pub fn parse_from(color: &str) -> DataResult<Self> {
+        if color.starts_with('#') {
+            i32::from_str_radix(&color[1..], 16).map_or_else(
+                |_| DataResult::new_error(format!("Invalid color value: {color}")),
+                |c| if (0..16777215).contains(&c) {
+                    DataResult::new_success(Self::Rgb(RGBColor::from(c)))
+                } else {
+                    DataResult::new_error(format!("Color value out of range: {color}"))
+                }
+            )
+        } else if color == "reset" {
+            DataResult::new_success(Self::Reset)
+        } else {
+            NamedColor::try_from(color)
+                .map_or_else(
+                    |_| DataResult::new_error(format!("Invalid color name: {color}")),
+                    |c| DataResult::new_success(Self::Named(c))
+                )
+        }
+    }
 }
 
 /// An RGB color with red, green, and blue components.
@@ -188,6 +230,22 @@ impl RGBColor {
     #[must_use]
     pub const fn new(red: u8, green: u8, blue: u8) -> Self {
         Self { red, green, blue }
+    }
+}
+
+impl From<i32> for RGBColor {
+    fn from(value: i32) -> Self {
+        Self {
+            red: (value >> 16 & 0xFF) as u8,
+            green: (value >> 8 & 0xFF) as u8,
+            blue: (value & 0xFF) as u8
+        }
+    }
+}
+
+impl From<RGBColor> for u32 {
+    fn from(value: RGBColor) -> Self {
+        (value.red as u32) << 16 | (value.green as u32) << 8 | (value.blue as u32)
     }
 }
 
@@ -353,6 +411,29 @@ impl TryFrom<&str> for NamedColor {
             "yellow" => Ok(Self::Yellow),
             "white" => Ok(Self::White),
             _ => Err(()),
+        }
+    }
+}
+
+impl From<NamedColor> for &str {
+    fn from(value: NamedColor) -> Self {
+        match value {
+            NamedColor::Black => "black",
+            NamedColor::DarkBlue => "dark_blue",
+            NamedColor::DarkGreen => "dark_green",
+            NamedColor::DarkAqua => "dark_aqua",
+            NamedColor::DarkRed => "dark_red",
+            NamedColor::DarkPurple => "dark_purple",
+            NamedColor::Gold => "gold",
+            NamedColor::Gray => "gray",
+            NamedColor::DarkGray => "dark_gray",
+            NamedColor::Blue => "blue",
+            NamedColor::Green => "green",
+            NamedColor::Aqua => "aqua",
+            NamedColor::Red => "red",
+            NamedColor::LightPurple => "light_purple",
+            NamedColor::Yellow => "yellow",
+            NamedColor::White => "white"
         }
     }
 }

@@ -5,6 +5,8 @@ use std::{
     sync::{LazyLock, Mutex},
 };
 
+use pumpkin_codecs_macros::{Decode, Encode};
+
 /// TODO List
 /// - Add server locale support
 /// - Use translations in the logs
@@ -242,7 +244,7 @@ pub fn translation_to_pretty<P: Into<Cow<'static, str>>>(
 pub fn get_translation_text<P1: Into<Cow<'static, str>>>(
     namespaced_key: P1,
     locale: Locale,
-    with: Vec<TextComponentBase>
+    with: Vec<TextComponentBase>,
 ) -> String {
     get_translation_text_with_fallback::<P1, P1>(namespaced_key, locale, with, None)
 }
@@ -257,18 +259,18 @@ pub fn get_translation_text<P1: Into<Cow<'static, str>>>(
 ///
 /// # Returns
 /// The resolved translation as plain text.
-pub fn get_translation_text_with_fallback<P1: Into<Cow<'static, str>>, P2: Into<Cow<'static, str>>>(
+pub fn get_translation_text_with_fallback<
+    P1: Into<Cow<'static, str>>,
+    P2: Into<Cow<'static, str>>,
+>(
     namespaced_key: P1,
     locale: Locale,
     with: Vec<TextComponentBase>,
-    fallback: Option<P2>
+    fallback: Option<P2>,
 ) -> String {
     let translation = get_translation(&namespaced_key.into(), locale);
     if with.is_empty() || !translation.contains('%') {
-        return fallback.map_or_else(
-            || translation.to_string(),
-            |s| s.into().to_string()
-        )
+        return fallback.map_or_else(|| translation.to_string(), |s| s.into().to_string());
     }
 
     let (substitutions, indices) = reorder_substitutions(&translation, with);
@@ -417,7 +419,8 @@ pub static TRANSLATIONS: LazyLock<Mutex<[HashMap<String, String>; Locale::COUNT]
     });
 
 /// Supported locales for translations.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Encode, Decode)]
+#[codec(rename_all = "snake_case")]
 pub enum Locale {
     AfZa,
     ArSa,

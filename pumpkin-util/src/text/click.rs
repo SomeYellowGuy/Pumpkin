@@ -1,10 +1,12 @@
 use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
+use pumpkin_codecs_macros::{Decode, Encode};
 
 /// Action to take on click of the text.
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize, Eq, Hash)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize, Eq, Hash, Encode, Decode)]
 #[serde(tag = "action", rename_all = "snake_case")]
+#[codec(tag_key = "action")]
 pub enum ClickEvent {
     /// Opens a URL.
     OpenUrl { url: Cow<'static, str> },
