@@ -347,7 +347,7 @@ fn encode_from_field_data(
             },
             FieldKind::Required => quote! {
                 builder = #codecs_crate::struct_builder::StructBuilder::add_string_key_value_result(
-                    #encoded_name_lit, #codecs_crate::DataResult::flat_map(r, |r| #codecs_crate::codec::Encode::encode_start(r, ops))
+                    builder, #encoded_name_lit, #codecs_crate::DataResult::flat_map(r, |r| #codecs_crate::codec::Encode::encode_start(r, ops))
                 );
             },
             FieldKind::Transparent => quote! {
