@@ -323,6 +323,7 @@ impl MapDecode for TextContent {
 
 #[cfg(test)]
 mod test {
+    use std::borrow::Cow;
     use crate::text::click::ClickEvent;
     use crate::text::color::{ARGBColor, Color, NamedColor, RGBColor};
     use crate::text::hover::HoverEvent;
@@ -413,7 +414,7 @@ mod test {
 
         assert_encode!(
             text_content_component!(TextContent::Custom {
-                key: Default::default(),
+                key: Cow::default(),
                 locale: Locale::EnUs,
                 with: vec![]
             }),
