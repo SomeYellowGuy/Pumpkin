@@ -7,7 +7,7 @@ use pumpkin_codecs_macros::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-fn default_stack_count() -> i32 {
+const fn default_stack_count() -> i32 {
     1
 }
 
@@ -49,7 +49,7 @@ pub enum CodecHoverEvent {
     },
     ShowItem {
         id: Cow<'static, str>,
-        #[codec(validate = CodecHoverEvent::validate_stack_count)]
+        #[codec(validate = CodecHoverEvent::validate_stack_count, default = 1)]
         count: i32,
         // components: Option<Cow<'static, str>>,
     },
@@ -61,14 +61,12 @@ pub enum CodecHoverEvent {
 }
 
 impl CodecHoverEvent {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     fn validate_stack_count(count: &i32) -> Result<(), String> {
         if (1..99).contains(count) {
             Ok(())
         } else {
-            Err(format!(
-                "Value must be within range [1;99]: {}",
-                count
-            ))
+            Err(format!("Value must be within range [1;99]: {count}"))
         }
     }
 }

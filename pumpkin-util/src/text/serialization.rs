@@ -30,10 +30,8 @@ impl TextComponentBase {
         ops: &'static O,
     ) -> DataResult<Self> {
         let content = TextContent::map_decode(input, ops);
-        let extra = Option::<NonEmptyVec<Self>>::decode_optional_field(
-            "extra", input, ops, false,
-        )
-        .map(|r| if let Some(vec) = r { vec.0 } else { Vec::new() });
+        let extra = Option::<NonEmptyVec<Self>>::decode_optional_field("extra", input, ops, false)
+            .map(|r| if let Some(vec) = r { vec.0 } else { Vec::new() });
         let style = Style::map_decode(input, ops);
 
         content.apply_3(
@@ -173,8 +171,8 @@ impl TextContent {
                 prefix = keybind.encode_field("keybind", ops, prefix);
             }
             Self::Custom { .. } => {
-                prefix =
-                    prefix.with_errors_from(&DataResult::<()>::new_error("No matching codec found"));
+                prefix = prefix
+                    .with_errors_from(&DataResult::<()>::new_error("No matching codec found"));
             }
         }
         prefix
@@ -325,7 +323,9 @@ impl MapDecode for TextContent {
 
 #[cfg(test)]
 mod test {
-    use crate::text::color::{Color, NamedColor, RGBColor};
+    use crate::text::click::ClickEvent;
+    use crate::text::color::{ARGBColor, Color, NamedColor, RGBColor};
+    use crate::text::hover::HoverEvent;
     use crate::text::style::Style;
     use crate::text::{TextComponent, TextComponentBase, TextContent};
     use crate::translation::Locale;
@@ -335,8 +335,6 @@ mod test {
     };
     use serde_json::json;
     use uuid::Uuid;
-    use crate::text::click::ClickEvent;
-    use crate::text::hover::HoverEvent;
 
     macro_rules! text_content_component {
         ($content:expr) => {
@@ -365,12 +363,12 @@ mod test {
         assert_encode_success!(
             TextComponent::translate("foo", []),
             JsonOps,
-            json!({"translate": "foo"})
+            json!({"translatable": "foo"})
         );
         assert_encode_success!(
             TextComponent::translate("foo", [TextComponent::text("bar")]),
             JsonOps,
-            json!({"translate": "foo", "with": ["bar"]})
+            json!({"translatable": "foo", "with": ["bar"]})
         );
         assert_encode_success!(
             TextComponent::translate(
@@ -378,7 +376,7 @@ mod test {
                 [TextComponent::text("bar").color(Color::Named(NamedColor::Red))]
             ),
             JsonOps,
-            json!({"translate": "foo", "with": [{"text": "bar", "color": "red"}]})
+            json!({"translatable": "foo", "with": [{"text": "bar", "color": "red"}]})
         );
 
         assert_encode_success!(
@@ -531,21 +529,58 @@ mod test {
             json!({"text": "c", "color": "reset"})
         );
 
-        assert_decode_success!(TextComponent, json!({"text": "a", "color": "light_purple"}), JsonOps, TextComponent::text("a").color(Color::Named(NamedColor::LightPurple)));
-        assert_decode!(TextComponent, json!({"text": "a", "color": "orange"}), JsonOps, is_error);
-        assert_decode_success!(TextComponent, json!({"text": "a", "color": "reset"}), JsonOps, TextComponent::text("a").color(Color::Reset));
+        assert_decode_success!(
+            TextComponent,
+            json!({"text": "a", "color": "light_purple"}),
+            JsonOps,
+            TextComponent::text("a").color(Color::Named(NamedColor::LightPurple))
+        );
+        assert_decode!(
+            TextComponent,
+            json!({"text": "a", "color": "orange"}),
+            JsonOps,
+            is_error
+        );
+        assert_decode_success!(
+            TextComponent,
+            json!({"text": "a", "color": "reset"}),
+            JsonOps,
+            TextComponent::text("a").color(Color::Reset)
+        );
 
-        assert_decode!(TextComponent, json!({"text": "a", "color": "#10101010"}), JsonOps, is_error);
-        assert_decode_success!(TextComponent, json!({"text": "a", "color": "#101010"}), JsonOps, TextComponent::text("a").color(Color::Rgb(RGBColor::new(16, 16, 16))));
-        assert_decode_success!(TextComponent, json!({"text": "a", "color": "#1010"}), JsonOps, TextComponent::text("a").color(Color::Rgb(RGBColor::new(0, 16, 16))));
-        assert_decode_success!(TextComponent, json!({"text": "a", "color": "#10"}), JsonOps, TextComponent::text("a").color(Color::Rgb(RGBColor::new(0, 0, 16))));
+        assert_decode!(
+            TextComponent,
+            json!({"text": "a", "color": "#10101010"}),
+            JsonOps,
+            is_error
+        );
+        assert_decode_success!(
+            TextComponent,
+            json!({"text": "a", "color": "#101010"}),
+            JsonOps,
+            TextComponent::text("a").color(Color::Rgb(RGBColor::new(16, 16, 16)))
+        );
+        assert_decode_success!(
+            TextComponent,
+            json!({"text": "a", "color": "#1010"}),
+            JsonOps,
+            TextComponent::text("a").color(Color::Rgb(RGBColor::new(0, 16, 16)))
+        );
+        assert_decode_success!(
+            TextComponent,
+            json!({"text": "a", "color": "#10"}),
+            JsonOps,
+            TextComponent::text("a").color(Color::Rgb(RGBColor::new(0, 0, 16)))
+        );
     }
 
     #[test]
     fn style_events() {
         // Click events
         assert_encode_success!(
-            TextComponent::text("test").click_event(ClickEvent::SuggestCommand { command: "list".into() }),
+            TextComponent::text("test").click_event(ClickEvent::SuggestCommand {
+                command: "list".into()
+            }),
             JsonOps,
             json!({"text": "test", "click_event": { "action": "suggest_command", "command": "list" }})
         );
@@ -555,29 +590,151 @@ mod test {
             json!({"text": "test", "click_event": { "action": "change_page", "page": 42 }})
         );
 
-        assert_decode!(TextComponent, json!({"text": "test", "click_event": { "action": "run_command", "command": "list" }}), JsonOps, is_success);
-        assert_decode!(TextComponent, json!({"text": "test", "click_event": { "action": "change_page", "page": 42 }}), JsonOps, is_success);
-        assert_decode!(TextComponent, json!({"text": "test", "click_event": { "type": "change_page", "page": 42 }}), JsonOps, is_error);
+        assert_decode!(
+            TextComponent,
+            json!({"text": "test", "click_event": { "action": "run_command", "command": "list" }}),
+            JsonOps,
+            is_success
+        );
+        assert_decode!(
+            TextComponent,
+            json!({"text": "test", "click_event": { "action": "change_page", "page": 42 }}),
+            JsonOps,
+            is_success
+        );
+        assert_decode!(
+            TextComponent,
+            json!({"text": "test", "click_event": { "type": "change_page", "page": 42 }}),
+            JsonOps,
+            is_error
+        );
 
         // Hover events
         assert_encode_success!(
-            TextComponent::text("test").hover_event(HoverEvent::ShowText { value: TextComponent::text("cool tooltip").0 }),
+            TextComponent::text("test").hover_event(HoverEvent::ShowText {
+                value: TextComponent::text("cool tooltip").0
+            }),
             JsonOps,
             json!({"text": "test", "hover_event": { "action": "show_text", "value": "cool tooltip" }})
         );
         assert_encode_success!(
-            TextComponent::text("test").hover_event(HoverEvent::ShowEntity { id: "minecraft:skeleton".into(), uuid: Uuid::from_u64_pair(1234, 5678).to_string().into(), name: None}),
+            TextComponent::text("test").hover_event(HoverEvent::ShowEntity {
+                id: "minecraft:skeleton".into(),
+                uuid: Uuid::from_u64_pair(1234, 5678).to_string().into(),
+                name: None
+            }),
             JsonOps,
             json!({"text": "test", "hover_event": { "action": "show_entity", "id": "minecraft:skeleton", "uuid": [0, 1234, 0, 5678] }})
         );
         assert_encode_success!(
-            TextComponent::text("test").hover_event(HoverEvent::ShowItem { id: "minecraft:stick".into(), count: Some(64) }),
+            TextComponent::text("test").hover_event(HoverEvent::ShowItem {
+                id: "minecraft:stick".into(),
+                count: 64
+            }),
             JsonOps,
             json!({"text": "test", "hover_event": { "action": "show_item", "id": "minecraft:stick", "count": 64 }})
+        );
+        assert_encode_success!(
+            TextComponent::text("test").hover_event(HoverEvent::ShowItem {
+                id: "minecraft:apple".into(),
+                count: 1
+            }),
+            JsonOps,
+            json!({"text": "test", "hover_event": { "action": "show_item", "id": "minecraft:apple" }})
+        );
+
+        assert_decode!(TextComponent, json!({"text": "test", "hover_event": { "action": "show_text", "value": "b" }}), JsonOps, is_success);
+        assert_decode!(TextComponent, json!({"text": "test", "hover_event": { "action": "show_entity", "id": "zombie", "uuid": "4df03ec2-4a10-11f1-a5a0-325096b39f47" }}), JsonOps, is_success);
+        assert_decode!(TextComponent, json!({"text": "test", "hover_event": { "action": "show_item", "id": "acacia_boat" }}), JsonOps, is_success);
+    }
+
+    #[test]
+    fn style_others() {
+        assert_encode_success!(
+            TextComponent::text("style").bold().italic().underlined().obfuscated().strikethrough(),
+            JsonOps,
+            json!({"text": "style", "bold": true, "underlined": true, "italic": true, "underlined": true, "strikethrough": true, "obfuscated": true }),
+        );
+
+        assert_encode_success!(
+            TextComponent::text("style").shadow_color(ARGBColor::new(255, 255, 255, 255)),
+            JsonOps,
+            json!({"text": "style", "shadow_color": -1 }),
+        );
+
+        assert_decode_success!(
+            TextComponent,
+            json!({"text": "style", "bold": true, "underlined": true, "italic": true, "underlined": true, "strikethrough": true, "obfuscated": true }),
+            JsonOps,
+            TextComponent::text("style").bold().italic().underlined().obfuscated().strikethrough()
+        );
+
+        assert_decode_success!(
+            TextComponent,
+            json!({"text": "style", "shadow_color": -1 }),
+            JsonOps,
+            TextComponent::text("style").shadow_color(ARGBColor::new(255, 255, 255, 255))
+        );
+        assert_decode_success!(
+            TextComponent,
+            json!({"text": "style", "shadow_color": [1.0, 1.0, 1.0, 1.0] }),
+            JsonOps,
+            TextComponent::text("style").shadow_color(ARGBColor::new(255, 255, 255, 255))
+        );
+        assert_decode!(
+            TextComponent,
+            json!({"text": "style", "shadow_color": [1.0, 1.0, 1.0] }),
+            JsonOps,
+            is_error
+        );
+        assert_decode!(
+            TextComponent,
+            json!({"text": "style", "shadow_color": [1.0, 1.0, 1.0, 1.0, 1.0] }),
+            JsonOps,
+            is_error
         );
     }
 
     #[test]
-    fn style_others() {}
+    fn extra() {
+        assert_encode_success!(
+            TextComponent::text("Hello world!").add_text("Child component"),
+            JsonOps,
+            json!({"text": "Hello world!", "extra": ["Child component"]}),
+        );
 
+        assert_decode_success!(
+            TextComponent,
+            json!({"text": "Hello world!", "extra": ["Child component"]}),
+            JsonOps,
+            TextComponent::text("Hello world!").add_text("Child component")
+        );
+
+        assert_decode!(
+            TextComponent,
+            json!({"text": "Hello world!"}),
+            JsonOps,
+            is_success
+        );
+        assert_decode!(
+            TextComponent,
+            // An empty "extra" list is not allowed.
+            json!({"text": "Hello world!", "extra": []}),
+            JsonOps,
+            is_error
+        );
+
+        assert_decode_success!(
+            TextComponent,
+            json!(["a", "b", "c"]),
+            JsonOps,
+            TextComponent::text("a").add_text("b").add_text("c")
+        );
+        assert_decode_success!(
+            TextComponent,
+            json!(["d", {"text": "e", "color": "#ffffff"}]),
+            JsonOps,
+            TextComponent::text("d").add_child(TextComponent::text("e").color(Color::Rgb(RGBColor::new(255, 255, 255)))),
+        );
+    }
 }
