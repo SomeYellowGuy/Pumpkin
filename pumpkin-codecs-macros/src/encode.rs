@@ -325,7 +325,7 @@ fn encode_from_field_data(
             FieldKind::Flatten => unimplemented!(),
             FieldKind::Option { .. } => quote! {
                 builder = #codecs_crate::struct_builder::StructBuilder::with_errors_from(builder, &r);
-                let builder = match r {
+                builder = match r {
                     #codecs_crate::DataResult::Success { result, .. } => if let Some(value) = result {
                         #codecs_crate::codec::FieldEncode::encode_field(value, #encoded_name_lit, ops, builder)
                     } else {
@@ -336,7 +336,7 @@ fn encode_from_field_data(
             },
             FieldKind::Defaulted { defaulted_tokens } => quote! {
                 builder = #codecs_crate::struct_builder::StructBuilder::with_errors_from(builder, &r);
-                let builder = match r {
+                builder = match r {
                     #codecs_crate::DataResult::Success { result, .. } => if #defaulted_tokens == *result {
                         builder
                     } else {
