@@ -133,6 +133,33 @@ where
     }
 }
 
+// Utility functions
+
+/// Tries to check a list to have a fixed size `size`, returning the appropriate
+/// [`DataResult`].
+///
+/// # Arguments
+/// - `list`: The list to validate.
+/// - `size`: The required size.
+///
+/// # Returns
+/// A successful result if `list.len() == size`; otherwise, it returns a partial/non-result.
+/// If this result is partial, it will also be `size` elements long.
+pub fn validate_fixed_size<T>(list: Vec<T>, size: usize) -> DataResult<Vec<T>> {
+    if list.len() == size {
+        DataResult::new_success(list)
+    } else {
+        let message = format!("Input is not a list of {size} elements");
+        if list.len() > size {
+            DataResult::new_partial_error(message, list.into_iter().take(size).collect())
+        } else {
+            DataResult::new_error(message)
+        }
+    }
+}
+
+//
+
 #[cfg(test)]
 mod test {
     use crate::assert_decode;

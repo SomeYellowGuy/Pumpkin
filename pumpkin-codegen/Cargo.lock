@@ -796,6 +796,7 @@ dependencies = [
  "pumpkin-codecs-macros",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

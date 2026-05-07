@@ -318,12 +318,8 @@ impl TextComponentBase {
                 let mut style = component.style.clone();
                 style.hover_event = match hover {
                     HoverEvent::ShowText { value } => {
-                        let mut hover_components = vec![];
-                        for hover_component in value {
-                            hover_components.push(hover_component.to_owned().to_translated());
-                        }
                         Some(HoverEvent::ShowText {
-                            value: hover_components,
+                            value: value.to_owned().to_translated(),
                         })
                     }
                     HoverEvent::ShowEntity { name, id, uuid } => name.as_ref().map_or_else(
@@ -337,7 +333,7 @@ impl TextComponentBase {
                         |name| {
                             Some(HoverEvent::ShowEntity {
                                 name: Some(
-                                    name.iter().map(|x| x.to_owned().to_translated()).collect(),
+                                    name.to_owned().to_translated(),
                                 ),
                                 id: id.clone(),
                                 uuid: uuid.clone(),
