@@ -1,6 +1,8 @@
 use crate::text::style::Style;
 use crate::text::{TextComponent, TextComponentBase, TextContent};
 use crate::translation::Locale;
+use either::Either;
+use pumpkin_codecs::codec::list::NonEmptyVec;
 use pumpkin_codecs::codec::optional_field::OptionalFieldDecode;
 use pumpkin_codecs::codec::{
     FieldDecode, FieldEncode, MapDecode, MapEncode, optional_field::OptionalFieldEncode,
@@ -8,8 +10,6 @@ use pumpkin_codecs::codec::{
 use pumpkin_codecs::struct_builder::StructBuilder;
 use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode, Lifecycle, MapLike};
 use std::borrow::Cow;
-use either::Either;
-use pumpkin_codecs::codec::list::NonEmptyVec;
 
 impl MapEncode for TextComponentBase {
     fn map_encode<O: DynamicOps, B: StructBuilder<Value = O::Value>>(
@@ -34,13 +34,7 @@ impl MapDecode for TextComponentBase {
     ) -> DataResult<Self> {
         let content = TextContent::map_decode(input, ops);
         let extra = Option::<NonEmptyVec<Self>>::decode_optional_field("extra", input, ops, false)
-            .map(|r| {
-                if let Some(vec) = r {
-                    vec.0
-                } else {
-                    Vec::new()
-                }
-            });
+            .map(|r| if let Some(vec) = r { vec.0 } else { Vec::new() });
         let style = Style::map_decode(input, ops);
 
         content.apply_3(
@@ -88,7 +82,8 @@ impl From<NonEmptyVec<TextComponentBase>> for TextComponent {
     }
 }
 
-type TextComponentEither = Either<Either<String, NonEmptyVec<TextComponentBase>>, TextComponentBase>;
+type TextComponentEither =
+    Either<Either<String, NonEmptyVec<TextComponentBase>>, TextComponentBase>;
 
 impl Encode for TextComponent {
     fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
@@ -107,9 +102,9 @@ impl Decode for TextComponent {
             let component = match e {
                 Either::Left(e) => match e {
                     Either::Left(s) => Self::text(s),
-                    Either::Right(v) => v.into()
-                }
-                Either::Right(b) => Self(b)
+                    Either::Right(v) => v.into(),
+                },
+                Either::Right(b) => Self(b),
             };
             (component, p)
         })
@@ -134,7 +129,9 @@ impl TextContent {
             } => {
                 prefix = translate.encode_field("translate", ops, prefix);
                 prefix = fallback.encode_optional_field("fallback", ops, prefix);
-                prefix = with.encode_field("with", ops, prefix);
+                if !with.is_empty() {
+                    prefix = with.encode_field("with", ops, prefix);
+                }
             }
             Self::EntityNames {
                 selector,
@@ -270,9 +267,7 @@ impl TextContent {
         ty.flat_map(|s| match s.as_str() {
             "text" => Self::map_decode_specific(TextContentType::Text, input, ops),
             "translate" => Self::map_decode_specific(TextContentType::Translate, input, ops),
-            "selector" => {
-                Self::map_decode_specific(TextContentType::EntityNames, input, ops)
-            }
+            "selector" => Self::map_decode_specific(TextContentType::EntityNames, input, ops),
             "keybind" => Self::map_decode_specific(TextContentType::Keybind, input, ops),
             "custom" => Self::map_decode_specific(TextContentType::Custom, input, ops),
             _ => DataResult::new_error(format!("Unknown element id: {s}")),

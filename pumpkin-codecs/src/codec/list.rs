@@ -153,7 +153,10 @@ impl<T> NonEmptyVec<T> {
     }
 }
 
-impl<T> Encode for NonEmptyVec<T> where T: Encode {
+impl<T> Encode for NonEmptyVec<T>
+where
+    T: Encode,
+{
     fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
         if self.0.is_empty() {
             DataResult::new_error("List must have contents")
@@ -163,7 +166,10 @@ impl<T> Encode for NonEmptyVec<T> where T: Encode {
     }
 }
 
-impl<T> Decode for NonEmptyVec<T> where T: Decode {
+impl<T> Decode for NonEmptyVec<T>
+where
+    T: Decode,
+{
     fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
         Vec::<T>::decode(input, ops).flat_map(|(v, c)| {
             if v.is_empty() {

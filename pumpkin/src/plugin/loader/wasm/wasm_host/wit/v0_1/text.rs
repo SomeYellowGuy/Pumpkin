@@ -272,9 +272,8 @@ impl pumpkin::plugin::text::HostTextComponent for PluginHostState {
         text: Resource<TextComponent>,
     ) -> wasmtime::Result<()> {
         let hover_tc = self.take_text(&text)?.provider;
-        self.get_text_mut(&res)?.provider.0.style.hover_event = Some(HoverEvent::ShowText {
-            value: hover_tc.0,
-        });
+        self.get_text_mut(&res)?.provider.0.style.hover_event =
+            Some(HoverEvent::ShowText { value: hover_tc.0 });
         Ok(())
     }
 

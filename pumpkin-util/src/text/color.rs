@@ -185,24 +185,28 @@ impl Color {
 
     pub fn parse_from(color: &str) -> DataResult<Self> {
         color.strip_prefix('#').map_or_else(
-            || if color == "reset" {
-                DataResult::new_success(Self::Reset)
-            } else {
-                NamedColor::try_from(color).map_or_else(
-                    |()| DataResult::new_error(format!("Invalid color name: {color}")),
-                    |c| DataResult::new_success(Self::Named(c)),
+            || {
+                if color == "reset" {
+                    DataResult::new_success(Self::Reset)
+                } else {
+                    NamedColor::try_from(color).map_or_else(
+                        |()| DataResult::new_error(format!("Invalid color name: {color}")),
+                        |c| DataResult::new_success(Self::Named(c)),
+                    )
+                }
+            },
+            |stripped| {
+                i32::from_str_radix(stripped, 16).map_or_else(
+                    |_| DataResult::new_error(format!("Invalid color value: {color}")),
+                    |c| {
+                        if (0..16777215).contains(&c) {
+                            DataResult::new_success(Self::Rgb(RGBColor::from(c)))
+                        } else {
+                            DataResult::new_error(format!("Color value out of range: {color}"))
+                        }
+                    },
                 )
             },
-            |stripped| i32::from_str_radix(stripped, 16).map_or_else(
-                |_| DataResult::new_error(format!("Invalid color value: {color}")),
-                |c| {
-                    if (0..16777215).contains(&c) {
-                        DataResult::new_success(Self::Rgb(RGBColor::from(c)))
-                    } else {
-                        DataResult::new_error(format!("Color value out of range: {color}"))
-                    }
-                },
-            )
         )
     }
 }
@@ -293,10 +297,10 @@ impl From<i32> for ARGBColor {
 
 impl From<ARGBColor> for i32 {
     fn from(value: ARGBColor) -> Self {
-        (value.alpha as Self) << 24 |
-        (value.red as Self) << 16 |
-        (value.green as Self) << 8 |
-        (value.blue as Self)
+        (value.alpha as Self) << 24
+            | (value.red as Self) << 16
+            | (value.green as Self) << 8
+            | (value.blue as Self)
     }
 }
 
