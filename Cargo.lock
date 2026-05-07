@@ -2814,6 +2814,7 @@ dependencies = [
  "num-bigint",
  "ordered-float",
  "postcard",
+ "proc-macro-crate",
  "pumpkin-codecs",
  "pumpkin-config",
  "pumpkin-data",
