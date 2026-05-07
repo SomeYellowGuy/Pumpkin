@@ -1,6 +1,8 @@
 use colored::{ColoredString, Colorize};
 use serde::{Deserialize, Deserializer, Serialize};
+use either::Either;
 use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode};
+use crate::math::vector4::Vector4;
 
 /// Text color for chat components.
 ///
@@ -271,6 +273,55 @@ pub struct ARGBColor {
     green: u8,
     /// The blue component (0-255).
     blue: u8,
+}
+
+impl ARGBColor {
+    fn color_component(value: f32) -> u8 {
+        (((value * 255.0).floor() as i32) & 0xFF) as u8
+    }
+}
+
+impl From<i32> for ARGBColor {
+    fn from(value: i32) -> Self {
+        Self {
+            alpha: ((value >> 24) & 0xFF) as u8,
+            red: ((value >> 16) & 0xFF) as u8,
+            green: ((value >> 8) & 0xFF) as u8,
+            blue: (value & 0xFF) as u8
+        }
+    }
+}
+
+impl From<Vector4<f32>> for ARGBColor {
+    fn from(value: Vector4<f32>) -> Self {
+        Self {
+            alpha: Self::color_component(value.w),
+            red: Self::color_component(value.x),
+            green: Self::color_component(value.y),
+            blue: Self::color_component(value.z)
+        }
+    }
+}
+
+impl Encode for ARGBColor {
+    fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
+        todo!()
+    }
+}
+
+impl Decode for ARGBColor {
+    fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
+        let either = Either::<i32, Vector4<f32>>::decode(input, ops);
+        either.map(
+            |(e, p)| {
+                let color = e.either(
+                    |l| Self::from(l),
+                    |r| Self::from(r),
+                );
+                (color, p)
+            }
+        )
+    }
 }
 
 impl ARGBColor {

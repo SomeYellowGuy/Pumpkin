@@ -2988,6 +2988,7 @@ dependencies = [
  "colored",
  "crypto-bigint 0.7.3",
  "ecdsa",
+ "either",
  "enum_dispatch",
  "md5",
  "num-derive",

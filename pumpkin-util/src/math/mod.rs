@@ -13,6 +13,7 @@ pub mod pool;
 pub mod position;
 pub mod vector2;
 pub mod vector3;
+pub mod vector4;
 pub mod vertical_surface_type;
 
 /// Wraps an angle in degrees to the range [-180, 180).
