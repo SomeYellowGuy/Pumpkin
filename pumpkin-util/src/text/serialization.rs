@@ -643,15 +643,35 @@ mod test {
             json!({"text": "test", "hover_event": { "action": "show_item", "id": "minecraft:apple" }})
         );
 
-        assert_decode!(TextComponent, json!({"text": "test", "hover_event": { "action": "show_text", "value": "b" }}), JsonOps, is_success);
-        assert_decode!(TextComponent, json!({"text": "test", "hover_event": { "action": "show_entity", "id": "zombie", "uuid": "4df03ec2-4a10-11f1-a5a0-325096b39f47" }}), JsonOps, is_success);
-        assert_decode!(TextComponent, json!({"text": "test", "hover_event": { "action": "show_item", "id": "acacia_boat" }}), JsonOps, is_success);
+        assert_decode!(
+            TextComponent,
+            json!({"text": "test", "hover_event": { "action": "show_text", "value": "b" }}),
+            JsonOps,
+            is_success
+        );
+        assert_decode!(
+            TextComponent,
+            json!({"text": "test", "hover_event": { "action": "show_entity", "id": "zombie", "uuid": "4df03ec2-4a10-11f1-a5a0-325096b39f47" }}),
+            JsonOps,
+            is_success
+        );
+        assert_decode!(
+            TextComponent,
+            json!({"text": "test", "hover_event": { "action": "show_item", "id": "acacia_boat" }}),
+            JsonOps,
+            is_success
+        );
     }
 
     #[test]
     fn style_others() {
         assert_encode_success!(
-            TextComponent::text("style").bold().italic().underlined().obfuscated().strikethrough(),
+            TextComponent::text("style")
+                .bold()
+                .italic()
+                .underlined()
+                .obfuscated()
+                .strikethrough(),
             JsonOps,
             json!({"text": "style", "bold": true, "underlined": true, "italic": true, "underlined": true, "strikethrough": true, "obfuscated": true }),
         );
@@ -666,7 +686,12 @@ mod test {
             TextComponent,
             json!({"text": "style", "bold": true, "underlined": true, "italic": true, "underlined": true, "strikethrough": true, "obfuscated": true }),
             JsonOps,
-            TextComponent::text("style").bold().italic().underlined().obfuscated().strikethrough()
+            TextComponent::text("style")
+                .bold()
+                .italic()
+                .underlined()
+                .obfuscated()
+                .strikethrough()
         );
 
         assert_decode_success!(
@@ -734,7 +759,9 @@ mod test {
             TextComponent,
             json!(["d", {"text": "e", "color": "#ffffff"}]),
             JsonOps,
-            TextComponent::text("d").add_child(TextComponent::text("e").color(Color::Rgb(RGBColor::new(255, 255, 255)))),
+            TextComponent::text("d").add_child(
+                TextComponent::text("e").color(Color::Rgb(RGBColor::new(255, 255, 255)))
+            ),
         );
     }
 }
