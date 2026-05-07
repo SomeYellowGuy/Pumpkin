@@ -7,6 +7,10 @@ use pumpkin_codecs_macros::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+fn default_stack_count() -> i32 {
+    1
+}
+
 /// Represents the hover event action in a chat component.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(tag = "action", rename_all = "snake_case")]
@@ -18,8 +22,8 @@ pub enum HoverEvent {
         /// Resource identifier of the item.
         id: Cow<'static, str>,
         /// Number of the items in the stack.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        count: Option<i32>,
+        #[serde(default = "default_stack_count")]
+        count: i32,
         // #[serde(default, skip_serializing_if = "Option::is_none")]
         // components: Option<Cow<'static, str>>,
     },
@@ -46,7 +50,7 @@ pub enum CodecHoverEvent {
     ShowItem {
         id: Cow<'static, str>,
         #[codec(validate = CodecHoverEvent::validate_stack_count)]
-        count: Option<i32>,
+        count: i32,
         // components: Option<Cow<'static, str>>,
     },
     ShowEntity {
@@ -57,14 +61,13 @@ pub enum CodecHoverEvent {
 }
 
 impl CodecHoverEvent {
-    #[allow(clippy::trivially_copy_pass_by_ref, clippy::ref_option)]
-    fn validate_stack_count(count: &Option<i32>) -> Result<(), String> {
-        if count.is_none_or(|c| (1..99).contains(&c)) {
+    fn validate_stack_count(count: &i32) -> Result<(), String> {
+        if (1..99).contains(count) {
             Ok(())
         } else {
             Err(format!(
                 "Value must be within range [1;99]: {}",
-                count.unwrap()
+                count
             ))
         }
     }

@@ -17,10 +17,10 @@ impl Encode for Uuid {
         let bytes = self.as_u128();
         // First i32 is most significant.
         let ints = vec![
-            (bytes >> 96 & 0xff) as i32,
-            (bytes >> 64 & 0xff) as i32,
-            (bytes >> 32 & 0xff) as i32,
-            (bytes & 0xff) as i32,
+            (bytes >> 96 & 0xffff_ffff) as i32,
+            (bytes >> 64 & 0xffff_ffff) as i32,
+            (bytes >> 32 & 0xffff_ffff) as i32,
+            (bytes & 0xffff_ffff) as i32,
         ];
         IntStream(ints).encode(ops, prefix)
     }

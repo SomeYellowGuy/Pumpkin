@@ -1,6 +1,5 @@
 use crate::text::style::Style;
 use crate::text::{TextComponent, TextComponentBase, TextContent};
-use crate::translation::Locale;
 use either::Either;
 use pumpkin_codecs::codec::list::NonEmptyVec;
 use pumpkin_codecs::codec::optional_field::OptionalFieldDecode;
@@ -11,8 +10,8 @@ use pumpkin_codecs::struct_builder::StructBuilder;
 use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode, Lifecycle, MapLike};
 use std::borrow::Cow;
 
-impl MapEncode for TextComponentBase {
-    fn map_encode<O: DynamicOps, B: StructBuilder<Value = O::Value>>(
+impl TextComponentBase {
+    fn inner_map_encode<O: DynamicOps, B: StructBuilder<Value = O::Value>>(
         &self,
         ops: &'static O,
         mut prefix: B,
@@ -25,16 +24,16 @@ impl MapEncode for TextComponentBase {
         prefix = self.style.map_encode(ops, prefix);
         prefix
     }
-}
 
-impl MapDecode for TextComponentBase {
-    fn map_decode<O: DynamicOps>(
+    fn inner_map_decode<O: DynamicOps>(
         input: &impl MapLike<Value = O::Value>,
         ops: &'static O,
     ) -> DataResult<Self> {
         let content = TextContent::map_decode(input, ops);
-        let extra = Option::<NonEmptyVec<Self>>::decode_optional_field("extra", input, ops, false)
-            .map(|r| if let Some(vec) = r { vec.0 } else { Vec::new() });
+        let extra = Option::<NonEmptyVec<Self>>::decode_optional_field(
+            "extra", input, ops, false,
+        )
+        .map(|r| if let Some(vec) = r { vec.0 } else { Vec::new() });
         let style = Style::map_decode(input, ops);
 
         content.apply_3(
@@ -47,29 +46,32 @@ impl MapDecode for TextComponentBase {
             style,
         )
     }
-}
 
-impl Encode for TextComponentBase {
-    fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
+    fn inner_encode<O: DynamicOps>(
+        &self,
+        ops: &'static O,
+        prefix: O::Value,
+    ) -> DataResult<O::Value> {
         let mut builder = ops.map_builder();
-        builder = self.map_encode(ops, builder);
+        builder = self.inner_map_encode(ops, builder);
         builder.build(prefix)
     }
-}
 
-impl Decode for TextComponentBase {
-    fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
+    fn inner_decode<O: DynamicOps>(
+        input: O::Value,
+        ops: &'static O,
+    ) -> DataResult<(Self, O::Value)> {
         let map = ops.get_map(&input);
         let single_result = map
             .with_lifecycle(Lifecycle::Stable)
-            .flat_map(|map| MapDecode::map_decode(&map, ops));
+            .flat_map(|map| Self::inner_map_decode(&map, ops));
         single_result.map(|s| (s, input))
     }
 }
 
 #[allow(clippy::fallible_impl_from)]
-impl From<NonEmptyVec<TextComponentBase>> for TextComponent {
-    fn from(value: NonEmptyVec<TextComponentBase>) -> Self {
+impl From<NonEmptyVec<Self>> for TextComponentBase {
+    fn from(value: NonEmptyVec<Self>) -> Self {
         // We make the first component the parent of the others.
         let mut bases_iter = value.vec().into_iter();
         // Since a `NonEmptyVec` is guaranteed to not be empty, it must
@@ -78,36 +80,63 @@ impl From<NonEmptyVec<TextComponentBase>> for TextComponent {
         for other in bases_iter {
             result.extra.push(other);
         }
-        Self(result)
+        result
+    }
+}
+
+struct InnerTextComponentBase(TextComponentBase);
+
+impl Encode for InnerTextComponentBase {
+    fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
+        self.0.inner_encode(ops, prefix)
+    }
+}
+
+impl Decode for InnerTextComponentBase {
+    fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
+        let base = TextComponentBase::inner_decode(input, ops);
+        base.map(|(base, p)| (Self(base), p))
     }
 }
 
 type TextComponentEither =
-    Either<Either<String, NonEmptyVec<TextComponentBase>>, TextComponentBase>;
+    Either<Either<String, NonEmptyVec<TextComponentBase>>, InnerTextComponentBase>;
 
-impl Encode for TextComponent {
+impl Encode for TextComponentBase {
     fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
-        if let Some(text) = self.0.collapse_to_string() {
+        if let Some(text) = self.collapse_to_string() {
             text.encode(ops, prefix)
         } else {
-            self.0.encode(ops, prefix)
+            self.inner_encode(ops, prefix)
         }
     }
 }
 
-impl Decode for TextComponent {
+impl Decode for TextComponentBase {
     fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
         let either = TextComponentEither::decode(input, ops);
         either.map(|(e, p)| {
             let component = match e {
                 Either::Left(e) => match e {
-                    Either::Left(s) => Self::text(s),
+                    Either::Left(s) => TextComponent::text(s).0,
                     Either::Right(v) => v.into(),
                 },
-                Either::Right(b) => Self(b),
+                Either::Right(b) => b.0,
             };
             (component, p)
         })
+    }
+}
+
+impl Encode for TextComponent {
+    fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
+        self.0.encode(ops, prefix)
+    }
+}
+
+impl Decode for TextComponent {
+    fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
+        TextComponentBase::decode(input, ops).map(|(base, p)| (Self(base), p))
     }
 }
 
@@ -127,7 +156,7 @@ impl TextContent {
                 with,
                 ..
             } => {
-                prefix = translate.encode_field("translate", ops, prefix);
+                prefix = translate.encode_field("translatable", ops, prefix);
                 prefix = fallback.encode_optional_field("fallback", ops, prefix);
                 if !with.is_empty() {
                     prefix = with.encode_field("with", ops, prefix);
@@ -143,10 +172,9 @@ impl TextContent {
             Self::Keybind { keybind } => {
                 prefix = keybind.encode_field("keybind", ops, prefix);
             }
-            Self::Custom { key, locale, with } => {
-                prefix = key.encode_field("key", ops, prefix);
-                prefix = locale.encode_field("locale", ops, prefix);
-                prefix = with.encode_field("with", ops, prefix);
+            Self::Custom { .. } => {
+                prefix =
+                    prefix.with_errors_from(&DataResult::<()>::new_error("No matching codec found"));
             }
         }
         prefix
@@ -163,17 +191,19 @@ impl TextContent {
                 text.map(|text| Self::Text { text })
             }
             TextContentType::Translate => {
-                let translate = Cow::<'static, str>::decode_field("translate", input, ops);
+                let translate = Cow::<'static, str>::decode_field("translatable", input, ops);
                 let fallback = Option::<Cow<'static, str>>::decode_optional_field(
                     "fallback", input, ops, true,
                 );
                 // TODO: accept many other things as well here
-                let with = Vec::<TextComponentBase>::decode_field("with", input, ops);
+                let with = Option::<Vec<TextComponentBase>>::decode_optional_field(
+                    "with", input, ops, false,
+                );
                 translate.apply_3(
                     |translate, fallback, with| Self::Translate {
                         translate,
                         fallback,
-                        with,
+                        with: with.unwrap_or_else(Vec::new),
                         bedrock_translate: None,
                     },
                     fallback,
@@ -181,6 +211,7 @@ impl TextContent {
                 )
             }
             TextContentType::EntityNames => {
+                // TODO: Validate the selector.
                 let selector = Cow::<'static, str>::decode_field("selector", input, ops);
                 let separator = Option::<Cow<'static, str>>::decode_optional_field(
                     "separator",
@@ -200,16 +231,6 @@ impl TextContent {
                 let keybind = Cow::<'static, str>::decode_field("keybind", input, ops);
                 keybind.map(|keybind| Self::Keybind { keybind })
             }
-            TextContentType::Custom => {
-                let key = Cow::<'static, str>::decode_field("key", input, ops);
-                let locale = Locale::decode_field("locale", input, ops);
-                let with = Vec::<TextComponentBase>::decode_field("with", input, ops);
-                key.apply_3(
-                    |key, locale, with| Self::Custom { key, locale, with },
-                    locale,
-                    with,
-                )
-            }
         }
     }
 }
@@ -220,16 +241,20 @@ enum TextContentType {
     Translate,
     EntityNames,
     Keybind,
-    Custom,
+    // We don't serialize Custom.
 }
 
 impl TextContentType {
-    const ALL: [Self; 5] = [
+    /// All [`TextContent`] types.
+    ///
+    /// The order is important; it decides which contents are prioritized first.
+    ///
+    /// For example, trying to print `{"text: "foo", keybind: "bar"}` prints `"foo"` (`Text` is first in the priority).
+    const ALL: [Self; 4] = [
         Self::Text,
         Self::Translate,
-        Self::EntityNames,
         Self::Keybind,
-        Self::Custom,
+        Self::EntityNames,
     ];
 }
 
@@ -266,10 +291,9 @@ impl TextContent {
         let ty = String::decode_field("type", input, ops);
         ty.flat_map(|s| match s.as_str() {
             "text" => Self::map_decode_specific(TextContentType::Text, input, ops),
-            "translate" => Self::map_decode_specific(TextContentType::Translate, input, ops),
+            "translatable" => Self::map_decode_specific(TextContentType::Translate, input, ops),
             "selector" => Self::map_decode_specific(TextContentType::EntityNames, input, ops),
             "keybind" => Self::map_decode_specific(TextContentType::Keybind, input, ops),
-            "custom" => Self::map_decode_specific(TextContentType::Custom, input, ops),
             _ => DataResult::new_error(format!("Unknown element id: {s}")),
         })
     }
@@ -297,4 +321,263 @@ impl MapDecode for TextContent {
             Self::fuzzy_map_decode(input, ops)
         }
     }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::text::color::{Color, NamedColor, RGBColor};
+    use crate::text::style::Style;
+    use crate::text::{TextComponent, TextComponentBase, TextContent};
+    use crate::translation::Locale;
+    use pumpkin_codecs::json_ops::JsonOps;
+    use pumpkin_codecs::{
+        assert_decode, assert_decode_success, assert_encode, assert_encode_success,
+    };
+    use serde_json::json;
+    use uuid::Uuid;
+    use crate::text::click::ClickEvent;
+    use crate::text::hover::HoverEvent;
+
+    macro_rules! text_content_component {
+        ($content:expr) => {
+            TextComponent(TextComponentBase {
+                content: Box::new($content),
+                style: Box::new(Style::default()),
+                extra: vec![],
+            })
+        };
+    }
+
+    #[test]
+    fn text_contents_encode() {
+        // This is simply encoded to a String because only plain text is present.
+        assert_encode_success!(
+            TextComponent::text("Hello world!"),
+            JsonOps,
+            json!("Hello world!")
+        );
+        assert_encode_success!(
+            TextComponent::text("Hello world!").color(Color::Named(NamedColor::Blue)),
+            JsonOps,
+            json!({"text": "Hello world!", "color": "blue"})
+        );
+
+        assert_encode_success!(
+            TextComponent::translate("foo", []),
+            JsonOps,
+            json!({"translate": "foo"})
+        );
+        assert_encode_success!(
+            TextComponent::translate("foo", [TextComponent::text("bar")]),
+            JsonOps,
+            json!({"translate": "foo", "with": ["bar"]})
+        );
+        assert_encode_success!(
+            TextComponent::translate(
+                "foo",
+                [TextComponent::text("bar").color(Color::Named(NamedColor::Red))]
+            ),
+            JsonOps,
+            json!({"translate": "foo", "with": [{"text": "bar", "color": "red"}]})
+        );
+
+        assert_encode_success!(
+            text_content_component!(TextContent::EntityNames {
+                selector: "@p".into(),
+                separator: None
+            }),
+            JsonOps,
+            json!({
+                "selector": "@p"
+            })
+        );
+        assert_encode_success!(
+            text_content_component!(TextContent::EntityNames {
+                selector: "@p".into(),
+                separator: Some(",".into())
+            }),
+            JsonOps,
+            json!({
+                "selector": "@p",
+                "separator": ","
+            })
+        );
+
+        assert_encode_success!(
+            text_content_component!(TextContent::Keybind {
+                keybind: "key.forward".into()
+            }),
+            JsonOps,
+            json!({
+                "keybind": "key.forward"
+            })
+        );
+
+        assert_encode!(
+            text_content_component!(TextContent::Custom {
+                key: Default::default(),
+                locale: Locale::EnUs,
+                with: vec![]
+            }),
+            JsonOps,
+            is_error
+        );
+    }
+
+    #[test]
+    fn text_contents_decode() {
+        assert_decode_success!(
+            TextComponent,
+            json!("baz"),
+            JsonOps,
+            TextComponent::text("baz")
+        );
+        assert_decode_success!(
+            TextComponent,
+            json!({"text": "baz", "bold": true}),
+            JsonOps,
+            TextComponent::text("baz").bold()
+        );
+
+        assert_decode_success!(
+            TextComponent,
+            json!({"translatable": "example", "with": ["123", "456"]}),
+            JsonOps,
+            TextComponent::translate(
+                "example",
+                [TextComponent::text("123"), TextComponent::text("456")]
+            )
+        );
+
+        assert_decode_success!(
+            TextComponent,
+            json!({"selector": "@e[]"}),
+            JsonOps,
+            text_content_component!(TextContent::EntityNames {
+                selector: "@e[]".into(),
+                separator: None
+            })
+        );
+
+        assert_decode_success!(
+            TextComponent,
+            json!({"keybind": "example"}),
+            JsonOps,
+            text_content_component!(TextContent::Keybind {
+                keybind: "example".into()
+            })
+        );
+
+        // Legacy component format
+        assert_decode_success!(
+            TextComponent,
+            json!({"type": "text", "text": "baz"}),
+            JsonOps,
+            TextComponent::text("baz")
+        );
+        assert_decode_success!(
+            TextComponent,
+            json!({"type": "keybind", "keybind": "example"}),
+            JsonOps,
+            text_content_component!(TextContent::Keybind {
+                keybind: "example".into()
+            })
+        );
+        assert_decode!(
+            TextComponent,
+            json!({"type": "text", "keybind": "example"}),
+            JsonOps,
+            is_error
+        );
+
+        // Priority
+        assert_decode_success!(
+            TextComponent,
+            json!({"text": "first", "keybind": "second"}),
+            JsonOps,
+            TextComponent::text("first")
+        );
+        assert_decode_success!(
+            TextComponent,
+            json!({"translatable": "first", "keybind": "second"}),
+            JsonOps,
+            TextComponent::translate("first", [])
+        );
+        assert_decode_success!(
+            TextComponent,
+            json!({"keybind": "first", "selector": "second"}),
+            JsonOps,
+            text_content_component!(TextContent::Keybind {
+                keybind: "first".into()
+            })
+        );
+    }
+
+    #[test]
+    fn style_color() {
+        assert_encode_success!(
+            TextComponent::text("a").color(Color::Named(NamedColor::Blue)),
+            JsonOps,
+            json!({"text": "a", "color": "blue"})
+        );
+        assert_encode_success!(
+            TextComponent::text("b").color(Color::Rgb(RGBColor::new(127, 127, 255))),
+            JsonOps,
+            json!({"text": "b", "color": "#7F7FFF"})
+        );
+        assert_encode_success!(
+            TextComponent::text("c").color(Color::Reset),
+            JsonOps,
+            json!({"text": "c", "color": "reset"})
+        );
+
+        assert_decode_success!(TextComponent, json!({"text": "a", "color": "light_purple"}), JsonOps, TextComponent::text("a").color(Color::Named(NamedColor::LightPurple)));
+        assert_decode!(TextComponent, json!({"text": "a", "color": "orange"}), JsonOps, is_error);
+        assert_decode_success!(TextComponent, json!({"text": "a", "color": "reset"}), JsonOps, TextComponent::text("a").color(Color::Reset));
+
+        assert_decode!(TextComponent, json!({"text": "a", "color": "#10101010"}), JsonOps, is_error);
+        assert_decode_success!(TextComponent, json!({"text": "a", "color": "#101010"}), JsonOps, TextComponent::text("a").color(Color::Rgb(RGBColor::new(16, 16, 16))));
+        assert_decode_success!(TextComponent, json!({"text": "a", "color": "#1010"}), JsonOps, TextComponent::text("a").color(Color::Rgb(RGBColor::new(0, 16, 16))));
+        assert_decode_success!(TextComponent, json!({"text": "a", "color": "#10"}), JsonOps, TextComponent::text("a").color(Color::Rgb(RGBColor::new(0, 0, 16))));
+    }
+
+    #[test]
+    fn style_events() {
+        // Click events
+        assert_encode_success!(
+            TextComponent::text("test").click_event(ClickEvent::SuggestCommand { command: "list".into() }),
+            JsonOps,
+            json!({"text": "test", "click_event": { "action": "suggest_command", "command": "list" }})
+        );
+        assert_encode_success!(
+            TextComponent::text("test").click_event(ClickEvent::ChangePage { page: 42 }),
+            JsonOps,
+            json!({"text": "test", "click_event": { "action": "change_page", "page": 42 }})
+        );
+
+        assert_decode!(TextComponent, json!({"text": "test", "click_event": { "action": "run_command", "command": "list" }}), JsonOps, is_success);
+        assert_decode!(TextComponent, json!({"text": "test", "click_event": { "action": "change_page", "page": 42 }}), JsonOps, is_success);
+        assert_decode!(TextComponent, json!({"text": "test", "click_event": { "type": "change_page", "page": 42 }}), JsonOps, is_error);
+
+        // Hover events
+        assert_encode_success!(
+            TextComponent::text("test").hover_event(HoverEvent::ShowText { value: TextComponent::text("cool tooltip").0 }),
+            JsonOps,
+            json!({"text": "test", "hover_event": { "action": "show_text", "value": "cool tooltip" }})
+        );
+        assert_encode_success!(
+            TextComponent::text("test").hover_event(HoverEvent::ShowEntity { id: "minecraft:skeleton".into(), uuid: Uuid::from_u64_pair(1234, 5678).to_string().into(), name: None}),
+            JsonOps,
+            json!({"text": "test", "hover_event": { "action": "show_entity", "id": "minecraft:skeleton", "uuid": [0, 1234, 0, 5678] }})
+        );
+        assert_encode_success!(
+            TextComponent::text("test").hover_event(HoverEvent::ShowItem { id: "minecraft:stick".into(), count: Some(64) }),
+            JsonOps,
+            json!({"text": "test", "hover_event": { "action": "show_item", "id": "minecraft:stick", "count": 64 }})
+        );
+    }
+
+    #[test]
+    fn style_others() {}
+
 }
