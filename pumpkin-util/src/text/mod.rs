@@ -8,7 +8,6 @@ use color::Color;
 use colored::Colorize;
 use core::str;
 use hover::HoverEvent;
-use pumpkin_codecs_macros::Encode;
 use pumpkin_nbt::serializer::Serializer;
 use serde::de::{Error, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -317,11 +316,9 @@ impl TextComponentBase {
             Some(ref hover) => {
                 let mut style = component.style.clone();
                 style.hover_event = match hover {
-                    HoverEvent::ShowText { value } => {
-                        Some(HoverEvent::ShowText {
-                            value: value.to_owned().to_translated(),
-                        })
-                    }
+                    HoverEvent::ShowText { value } => Some(HoverEvent::ShowText {
+                        value: value.to_owned().to_translated(),
+                    }),
                     HoverEvent::ShowEntity { name, id, uuid } => name.as_ref().map_or_else(
                         || {
                             Some(HoverEvent::ShowEntity {
@@ -332,9 +329,7 @@ impl TextComponentBase {
                         },
                         |name| {
                             Some(HoverEvent::ShowEntity {
-                                name: Some(
-                                    name.to_owned().to_translated(),
-                                ),
+                                name: Some(name.to_owned().to_translated()),
                                 id: id.clone(),
                                 uuid: uuid.clone(),
                             })

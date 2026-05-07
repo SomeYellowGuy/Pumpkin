@@ -4,10 +4,11 @@ use super::{
     hover::HoverEvent,
 };
 use crate::text::color::ARGBColor;
+use pumpkin_codecs_macros::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 /// Represents the styling options for a text component.
-#[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq, Eq, Hash, Encode, Decode)]
 pub struct Style {
     /// The color to render the content.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -38,6 +39,7 @@ pub struct Style {
     pub hover_event: Option<HoverEvent>,
     /// Allows you to change the font of the text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    // TODO: Create something like FontDescription
     pub font: Option<String>,
     /// Custom shadow color for the text.
     #[serde(

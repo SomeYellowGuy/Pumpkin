@@ -1,5 +1,5 @@
-use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode};
 use pumpkin_codecs::codec::list::validate_fixed_size;
+use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode};
 
 /// A 4-dimensional vector with components of type `T`.
 ///

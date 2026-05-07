@@ -273,7 +273,7 @@ impl pumpkin::plugin::text::HostTextComponent for PluginHostState {
     ) -> wasmtime::Result<()> {
         let hover_tc = self.take_text(&text)?.provider;
         self.get_text_mut(&res)?.provider.0.style.hover_event = Some(HoverEvent::ShowText {
-            value: vec![hover_tc.0],
+            value: hover_tc.0,
         });
         Ok(())
     }
@@ -298,7 +298,7 @@ impl pumpkin::plugin::text::HostTextComponent for PluginHostState {
         name: Option<Resource<TextComponent>>,
     ) -> wasmtime::Result<()> {
         let name_val = match name {
-            Some(r) => Some(vec![self.take_text(&r)?.provider.0]),
+            Some(r) => Some(self.take_text(&r)?.provider.0),
             None => None,
         };
         self.get_text_mut(&res)?.provider.0.style.hover_event = Some(HoverEvent::ShowEntity {

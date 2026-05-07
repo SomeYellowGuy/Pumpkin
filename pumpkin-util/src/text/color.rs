@@ -1,8 +1,8 @@
+use crate::math::vector4::Vector4;
 use colored::{ColoredString, Colorize};
-use serde::{Deserialize, Deserializer, Serialize};
 use either::Either;
 use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode};
-use crate::math::vector4::Vector4;
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Text color for chat components.
 ///
@@ -37,10 +37,7 @@ impl Encode for Color {
 
 impl Decode for Color {
     fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
-        String::decode(input, ops)
-            .flat_map(|(s, v)| {
-                Color::parse_from(&s).map(|c| (c, v))
-            })
+        String::decode(input, ops).flat_map(|(s, v)| Color::parse_from(&s).map(|c| (c, v)))
     }
 }
 
@@ -190,20 +187,21 @@ impl Color {
         if color.starts_with('#') {
             i32::from_str_radix(&color[1..], 16).map_or_else(
                 |_| DataResult::new_error(format!("Invalid color value: {color}")),
-                |c| if (0..16777215).contains(&c) {
-                    DataResult::new_success(Self::Rgb(RGBColor::from(c)))
-                } else {
-                    DataResult::new_error(format!("Color value out of range: {color}"))
-                }
+                |c| {
+                    if (0..16777215).contains(&c) {
+                        DataResult::new_success(Self::Rgb(RGBColor::from(c)))
+                    } else {
+                        DataResult::new_error(format!("Color value out of range: {color}"))
+                    }
+                },
             )
         } else if color == "reset" {
             DataResult::new_success(Self::Reset)
         } else {
-            NamedColor::try_from(color)
-                .map_or_else(
-                    |_| DataResult::new_error(format!("Invalid color name: {color}")),
-                    |c| DataResult::new_success(Self::Named(c))
-                )
+            NamedColor::try_from(color).map_or_else(
+                |_| DataResult::new_error(format!("Invalid color name: {color}")),
+                |c| DataResult::new_success(Self::Named(c)),
+            )
         }
     }
 }
@@ -240,7 +238,7 @@ impl From<i32> for RGBColor {
         Self {
             red: (value >> 16 & 0xFF) as u8,
             green: (value >> 8 & 0xFF) as u8,
-            blue: (value & 0xFF) as u8
+            blue: (value & 0xFF) as u8,
         }
     }
 }
@@ -287,8 +285,17 @@ impl From<i32> for ARGBColor {
             alpha: ((value >> 24) & 0xFF) as u8,
             red: ((value >> 16) & 0xFF) as u8,
             green: ((value >> 8) & 0xFF) as u8,
-            blue: (value & 0xFF) as u8
+            blue: (value & 0xFF) as u8,
         }
+    }
+}
+
+impl From<ARGBColor> for i32 {
+    fn from(value: ARGBColor) -> Self {
+        (value.alpha as i32) << 24 |
+        (value.red as i32) << 16 |
+        (value.green as i32) << 8 |
+        (value.blue as i32)
     }
 }
 
@@ -298,29 +305,24 @@ impl From<Vector4<f32>> for ARGBColor {
             alpha: Self::color_component(value.w),
             red: Self::color_component(value.x),
             green: Self::color_component(value.y),
-            blue: Self::color_component(value.z)
+            blue: Self::color_component(value.z),
         }
     }
 }
 
 impl Encode for ARGBColor {
     fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
-        todo!()
+        i32::from(*self).encode(ops, prefix)
     }
 }
 
 impl Decode for ARGBColor {
     fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
         let either = Either::<i32, Vector4<f32>>::decode(input, ops);
-        either.map(
-            |(e, p)| {
-                let color = e.either(
-                    |l| Self::from(l),
-                    |r| Self::from(r),
-                );
-                (color, p)
-            }
-        )
+        either.map(|(e, p)| {
+            let color = e.either(|l| Self::from(l), |r| Self::from(r));
+            (color, p)
+        })
     }
 }
 
@@ -484,7 +486,7 @@ impl From<NamedColor> for &str {
             NamedColor::Red => "red",
             NamedColor::LightPurple => "light_purple",
             NamedColor::Yellow => "yellow",
-            NamedColor::White => "white"
+            NamedColor::White => "white",
         }
     }
 }

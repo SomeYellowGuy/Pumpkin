@@ -1,7 +1,7 @@
 use either::Either;
-use uuid::Uuid;
-use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode};
 use pumpkin_codecs::codec::extra::uuid_from_vec;
+use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode};
+use uuid::Uuid;
 
 /// Parses UUIDs similar to Java's `UUID.fromString` method.
 #[inline]

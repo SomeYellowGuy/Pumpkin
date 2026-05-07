@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
-use serde::{Deserialize, Serialize};
 use pumpkin_codecs_macros::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
 /// Action to take on click of the text.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize, Eq, Hash, Encode, Decode)]

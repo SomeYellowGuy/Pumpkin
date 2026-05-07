@@ -1,20 +1,86 @@
-use crate::text::{TextComponentBase, TextContent};
+use crate::text::style::Style;
+use crate::text::{TextComponent, TextComponentBase, TextContent};
 use crate::translation::Locale;
 use pumpkin_codecs::codec::optional_field::OptionalFieldDecode;
-use pumpkin_codecs::codec::{FieldDecode, FieldEncode, optional_field::OptionalFieldEncode, MapEncode, MapDecode};
+use pumpkin_codecs::codec::{
+    FieldDecode, FieldEncode, MapDecode, MapEncode, optional_field::OptionalFieldEncode,
+};
 use pumpkin_codecs::struct_builder::StructBuilder;
-use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode, MapLike};
+use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode, Lifecycle, MapLike};
 use std::borrow::Cow;
+
+impl MapEncode for TextComponentBase {
+    fn map_encode<O: DynamicOps, B: StructBuilder<Value = O::Value>>(
+        &self,
+        ops: &'static O,
+        mut prefix: B,
+    ) -> B {
+        prefix = self.content.map_encode(ops, prefix);
+        if !self.extra.is_empty() {
+            // The "extra" tag is optional, but if it is present, it cannot be empty.
+            prefix = self.extra.encode_field("extra", ops, prefix);
+        }
+        prefix = self.style.map_encode(ops, prefix);
+        prefix
+    }
+}
+
+impl MapDecode for TextComponentBase {
+    fn map_decode<O: DynamicOps>(
+        input: &impl MapLike<Value = O::Value>,
+        ops: &'static O,
+    ) -> DataResult<Self> {
+        let content = TextContent::map_decode(input, ops);
+        let extra = Option::<Vec<Self>>::decode_optional_field("extra", input, ops, false)
+            .flat_map(|l| {
+                if l.as_ref().is_some_and(Vec::is_empty) {
+                    // The tag was empty.
+                    DataResult::new_error("List must have contents")
+                } else {
+                    DataResult::new_success(l.unwrap_or_else(Vec::new))
+                }
+            });
+        let style = Style::map_decode(input, ops);
+
+        content.apply_3(
+            |content, extra, style| Self {
+                content: Box::new(content),
+                extra,
+                style: Box::new(style),
+            },
+            extra,
+            style,
+        )
+    }
+}
 
 impl Encode for TextComponentBase {
     fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
-        todo!()
+        let mut builder = ops.map_builder();
+        builder = self.map_encode(ops, builder);
+        builder.build(prefix)
     }
 }
 
 impl Decode for TextComponentBase {
     fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
-        todo!()
+        let map = ops.get_map(&input);
+        let single_result = map
+            .with_lifecycle(Lifecycle::Stable)
+            .flat_map(|map| MapDecode::map_decode(&map, ops));
+        single_result.map(|s| (s, input))
+    }
+}
+
+impl Encode for TextComponent {
+    fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
+        self.0.encode(ops, prefix)
+    }
+}
+
+impl Decode for TextComponent {
+    fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
+        TextComponentBase::decode(input, ops).map(|(b, p)| (Self(b), p))
     }
 }
 
@@ -139,15 +205,22 @@ impl TextContentType {
 
 // Fuzzy
 impl TextContent {
-    fn fuzzy_map_encode<O: DynamicOps, B: StructBuilder<Value=O::Value>>(&self, ops: &'static O, prefix: B) -> B {
+    fn fuzzy_map_encode<O: DynamicOps, B: StructBuilder<Value = O::Value>>(
+        &self,
+        ops: &'static O,
+        prefix: B,
+    ) -> B {
         self.map_encode_specific(ops, prefix)
     }
 
-    fn fuzzy_map_decode<O: DynamicOps>(input: &impl MapLike<Value=O::Value>, ops: &'static O) -> DataResult<Self> {
+    fn fuzzy_map_decode<O: DynamicOps>(
+        input: &impl MapLike<Value = O::Value>,
+        ops: &'static O,
+    ) -> DataResult<Self> {
         for ty in TextContentType::ALL {
             let result = TextContent::map_decode_specific(ty, input, ops);
             if result.is_success() {
-                return result
+                return result;
             }
         }
         DataResult::new_error("No matching codec found")
@@ -156,30 +229,40 @@ impl TextContent {
 
 // Legacy
 impl TextContent {
-    fn legacy_map_decode<O: DynamicOps>(input: &impl MapLike<Value=O::Value>, ops: &'static O) -> DataResult<Self> {
+    fn legacy_map_decode<O: DynamicOps>(
+        input: &impl MapLike<Value = O::Value>,
+        ops: &'static O,
+    ) -> DataResult<Self> {
         let ty = String::decode_field("type", input, ops);
-        ty.flat_map(|s| {
-            match s.as_str() {
-                "text" => TextContent::map_decode_specific(TextContentType::Text, input, ops),
-                "translate" => TextContent::map_decode_specific(TextContentType::Translate, input, ops),
-                "selector" => TextContent::map_decode_specific(TextContentType::EntityNames, input, ops),
-                "keybind" => TextContent::map_decode_specific(TextContentType::Keybind, input, ops),
-                "custom" => TextContent::map_decode_specific(TextContentType::Custom, input, ops),
-                _ => DataResult::new_error(format!("Unknown element id: {s}"))
+        ty.flat_map(|s| match s.as_str() {
+            "text" => TextContent::map_decode_specific(TextContentType::Text, input, ops),
+            "translate" => TextContent::map_decode_specific(TextContentType::Translate, input, ops),
+            "selector" => {
+                TextContent::map_decode_specific(TextContentType::EntityNames, input, ops)
             }
+            "keybind" => TextContent::map_decode_specific(TextContentType::Keybind, input, ops),
+            "custom" => TextContent::map_decode_specific(TextContentType::Custom, input, ops),
+            _ => DataResult::new_error(format!("Unknown element id: {s}")),
         })
     }
 }
 
 // Combined
 impl MapEncode for TextContent {
-    fn map_encode<O: DynamicOps, B: StructBuilder<Value=O::Value>>(&self, ops: &'static O, prefix: B) -> B {
+    fn map_encode<O: DynamicOps, B: StructBuilder<Value = O::Value>>(
+        &self,
+        ops: &'static O,
+        prefix: B,
+    ) -> B {
         self.fuzzy_map_encode(ops, prefix)
     }
 }
 
 impl MapDecode for TextContent {
-    fn map_decode<O: DynamicOps>(input: &impl MapLike<Value=O::Value>, ops: &'static O) -> DataResult<Self> {
+    fn map_decode<O: DynamicOps>(
+        input: &impl MapLike<Value = O::Value>,
+        ops: &'static O,
+    ) -> DataResult<Self> {
         if input.get_str("type").is_some() {
             Self::legacy_map_decode(input, ops)
         } else {

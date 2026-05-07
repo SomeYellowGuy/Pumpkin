@@ -1,9 +1,9 @@
 mod either;
+pub mod extra;
 pub mod list;
 pub mod map;
 pub mod optional_field;
 pub(crate) mod primitive;
-pub mod extra;
 
 use crate::codec::optional_field::OptionalFieldDecode;
 use crate::map_like::MapLike;
