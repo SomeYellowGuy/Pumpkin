@@ -4,6 +4,14 @@ use crate::{DataResult, Decode, DynamicOps, Encode, FlatTryFrom, Lifecycle};
 /// A wrapped [`Vec`] that can only contain a size of elements between `MIN` and `MAX` (inclusive).
 pub struct BoundedVec<T, const MIN: usize, const MAX: usize>(Vec<T>);
 
+impl<T, const MIN: usize, const MAX: usize> BoundedVec<T, MIN, MAX> {
+    /// Returns the wrapped `Vec` of this `BoundedVec`.
+    #[must_use]
+    pub fn vec(self) -> Vec<T> {
+        self.0
+    }
+}
+
 impl<T, const MIN: usize, const MAX: usize> From<BoundedVec<T, MIN, MAX>> for Vec<T> {
     fn from(value: BoundedVec<T, MIN, MAX>) -> Self {
         value.0
@@ -129,6 +137,40 @@ where
 
             let pair = (elements, ops.create_list(Vec::new()));
             result.with_complete_or_partial(pair)
+        })
+    }
+}
+
+/// A wrapper around a `Vec` that cannot have it be empty,
+/// similar to Minecraft's `ExtraCodecs.nonEmptyList`.
+pub struct NonEmptyVec<T>(pub Vec<T>);
+
+impl<T> NonEmptyVec<T> {
+    /// Returns the wrapped `Vec` of this `NonEmptyVec`.
+    #[must_use]
+    pub fn vec(self) -> Vec<T> {
+        self.0
+    }
+}
+
+impl<T> Encode for NonEmptyVec<T> where T: Encode {
+    fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
+        if self.0.is_empty() {
+            DataResult::new_error("List must have contents")
+        } else {
+            self.0.encode(ops, prefix)
+        }
+    }
+}
+
+impl<T> Decode for NonEmptyVec<T> where T: Decode {
+    fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
+        Vec::<T>::decode(input, ops).flat_map(|(v, c)| {
+            if v.is_empty() {
+                DataResult::new_error("List must have contents")
+            } else {
+                DataResult::new_success((Self(v), c))
+            }
         })
     }
 }

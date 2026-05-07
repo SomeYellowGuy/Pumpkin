@@ -27,7 +27,7 @@ impl<T> Vector4<T> {
     ///
     /// # Returns
     /// A new `Vector4` with the specified components.
-    pub fn new(w: T, x: T, y: T, z: T) -> Self {
+    pub const fn new(w: T, x: T, y: T, z: T) -> Self {
         Self { w, x, y, z }
     }
 }
@@ -43,6 +43,6 @@ impl Decode for Vector4<f32> {
     fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
         Vec::<f32>::decode(input, ops)
             .flat_map(|(v, p)| validate_fixed_size(v, 4).map(|v| (v, p)))
-            .map(|(v, p)| (Vector4::new(v[0], v[1], v[2], v[3]), p))
+            .map(|(v, p)| (Self::new(v[0], v[1], v[2], v[3]), p))
     }
 }

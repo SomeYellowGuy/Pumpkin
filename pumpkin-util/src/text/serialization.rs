@@ -8,6 +8,8 @@ use pumpkin_codecs::codec::{
 use pumpkin_codecs::struct_builder::StructBuilder;
 use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode, Lifecycle, MapLike};
 use std::borrow::Cow;
+use either::Either;
+use pumpkin_codecs::codec::list::NonEmptyVec;
 
 impl MapEncode for TextComponentBase {
     fn map_encode<O: DynamicOps, B: StructBuilder<Value = O::Value>>(
@@ -31,13 +33,12 @@ impl MapDecode for TextComponentBase {
         ops: &'static O,
     ) -> DataResult<Self> {
         let content = TextContent::map_decode(input, ops);
-        let extra = Option::<Vec<Self>>::decode_optional_field("extra", input, ops, false)
-            .flat_map(|l| {
-                if l.as_ref().is_some_and(Vec::is_empty) {
-                    // The tag was empty.
-                    DataResult::new_error("List must have contents")
+        let extra = Option::<NonEmptyVec<Self>>::decode_optional_field("extra", input, ops, false)
+            .map(|r| {
+                if let Some(vec) = r {
+                    vec.0
                 } else {
-                    DataResult::new_success(l.unwrap_or_else(Vec::new))
+                    Vec::new()
                 }
             });
         let style = Style::map_decode(input, ops);
@@ -72,15 +73,46 @@ impl Decode for TextComponentBase {
     }
 }
 
+#[allow(clippy::fallible_impl_from)]
+impl From<NonEmptyVec<TextComponentBase>> for TextComponent {
+    fn from(value: NonEmptyVec<TextComponentBase>) -> Self {
+        // We make the first component the parent of the others.
+        let mut bases_iter = value.vec().into_iter();
+        // Since a `NonEmptyVec` is guaranteed to not be empty, it must
+        // have a first element.
+        let mut result = bases_iter.next().unwrap();
+        for other in bases_iter {
+            result.extra.push(other);
+        }
+        Self(result)
+    }
+}
+
+type TextComponentEither = Either<Either<String, NonEmptyVec<TextComponentBase>>, TextComponentBase>;
+
 impl Encode for TextComponent {
     fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
-        self.0.encode(ops, prefix)
+        if let Some(text) = self.0.collapse_to_string() {
+            text.encode(ops, prefix)
+        } else {
+            self.0.encode(ops, prefix)
+        }
     }
 }
 
 impl Decode for TextComponent {
     fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
-        TextComponentBase::decode(input, ops).map(|(b, p)| (Self(b), p))
+        let either = TextComponentEither::decode(input, ops);
+        either.map(|(e, p)| {
+            let component = match e {
+                Either::Left(e) => match e {
+                    Either::Left(s) => Self::text(s),
+                    Either::Right(v) => v.into()
+                }
+                Either::Right(b) => Self(b)
+            };
+            (component, p)
+        })
     }
 }
 
@@ -185,6 +217,7 @@ impl TextContent {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 enum TextContentType {
     Text,
     Translate,
@@ -218,7 +251,7 @@ impl TextContent {
         ops: &'static O,
     ) -> DataResult<Self> {
         for ty in TextContentType::ALL {
-            let result = TextContent::map_decode_specific(ty, input, ops);
+            let result = Self::map_decode_specific(ty, input, ops);
             if result.is_success() {
                 return result;
             }
@@ -235,13 +268,13 @@ impl TextContent {
     ) -> DataResult<Self> {
         let ty = String::decode_field("type", input, ops);
         ty.flat_map(|s| match s.as_str() {
-            "text" => TextContent::map_decode_specific(TextContentType::Text, input, ops),
-            "translate" => TextContent::map_decode_specific(TextContentType::Translate, input, ops),
+            "text" => Self::map_decode_specific(TextContentType::Text, input, ops),
+            "translate" => Self::map_decode_specific(TextContentType::Translate, input, ops),
             "selector" => {
-                TextContent::map_decode_specific(TextContentType::EntityNames, input, ops)
+                Self::map_decode_specific(TextContentType::EntityNames, input, ops)
             }
-            "keybind" => TextContent::map_decode_specific(TextContentType::Keybind, input, ops),
-            "custom" => TextContent::map_decode_specific(TextContentType::Custom, input, ops),
+            "keybind" => Self::map_decode_specific(TextContentType::Keybind, input, ops),
+            "custom" => Self::map_decode_specific(TextContentType::Custom, input, ops),
             _ => DataResult::new_error(format!("Unknown element id: {s}")),
         })
     }

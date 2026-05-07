@@ -2,8 +2,9 @@ use crate::codec::list::validate_fixed_size;
 use crate::{DataResult, Decode, DynamicOps, Encode, IntStream};
 use uuid::Uuid;
 
-/// Converts the first 4 elements of a [`Vec`] to an UUID.
-pub fn uuid_from_vec(vec: Vec<i32>) -> Uuid {
+/// Converts the first 4 elements of a [`Vec`] to a UUID.
+#[must_use]
+pub fn uuid_from_vec(vec: &[i32]) -> Uuid {
     Uuid::from_u128(
         (vec[0] as u128) << 96 | (vec[1] as u128) << 64 | (vec[2] as u128) << 32 | (vec[3] as u128),
     )
@@ -29,7 +30,7 @@ impl Decode for Uuid {
     fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
         IntStream::decode(input, ops).flat_map(|(stream, p)| {
             let vec = stream.0;
-            validate_fixed_size(vec, 4).map(|vec| (uuid_from_vec(vec), p))
+            validate_fixed_size(vec, 4).map(|vec| (uuid_from_vec(&vec), p))
         })
     }
 }

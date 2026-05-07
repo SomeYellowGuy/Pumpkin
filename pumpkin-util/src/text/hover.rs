@@ -57,6 +57,7 @@ pub enum CodecHoverEvent {
 }
 
 impl CodecHoverEvent {
+    #[allow(clippy::trivially_copy_pass_by_ref, clippy::ref_option)]
     fn validate_stack_count(count: &Option<i32>) -> Result<(), String> {
         if count.is_none_or(|c| (1..99).contains(&c)) {
             Ok(())
@@ -86,16 +87,16 @@ impl From<CodecHoverEvent> for HoverEvent {
 impl CodecHoverEvent {
     fn from_normal(value: &HoverEvent) -> Result<Self, uuid::Error> {
         match value {
-            HoverEvent::ShowText { value } => Ok(CodecHoverEvent::ShowText {
+            HoverEvent::ShowText { value } => Ok(Self::ShowText {
                 value: value.clone(),
             }),
-            HoverEvent::ShowItem { id, count } => Ok(CodecHoverEvent::ShowItem {
+            HoverEvent::ShowItem { id, count } => Ok(Self::ShowItem {
                 id: id.clone(),
                 count: *count,
             }),
             HoverEvent::ShowEntity { id, uuid, name } => {
                 // For now, we convert the Cow to a Uuid.
-                Uuid::parse_str(&uuid).map(|uuid| CodecHoverEvent::ShowEntity {
+                Uuid::parse_str(uuid).map(|uuid| Self::ShowEntity {
                     id: id.clone(),
                     uuid: LenientUuid(uuid),
                     name: name.clone(),

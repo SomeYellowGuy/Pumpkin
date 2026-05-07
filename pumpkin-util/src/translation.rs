@@ -270,7 +270,7 @@ pub fn get_translation_text_with_fallback<
 ) -> String {
     let translation = get_translation(&namespaced_key.into(), locale);
     if with.is_empty() || !translation.contains('%') {
-        return fallback.map_or_else(|| translation.to_string(), |s| s.into().to_string());
+        return fallback.map_or_else(|| translation.clone(), |s| s.into().to_string());
     }
 
     let (substitutions, indices) = reorder_substitutions(&translation, with);

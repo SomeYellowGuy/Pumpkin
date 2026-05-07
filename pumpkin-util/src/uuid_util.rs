@@ -58,11 +58,7 @@ impl Encode for StringUuid {
 impl Decode for StringUuid {
     fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
         String::decode(input, ops).flat_map(|(s, p)| {
-            if let Some(vec) = parse_uuid(&s) {
-                DataResult::new_success((StringUuid(uuid_from_vec(vec)), p))
-            } else {
-                DataResult::new_error(format!("Invalid UUID {s}"))
-            }
+            parse_uuid(&s).map_or_else(|| DataResult::new_error(format!("Invalid UUID {s}")), |vec| DataResult::new_success((Self(uuid_from_vec(&vec)), p)))
         })
     }
 }
@@ -81,7 +77,7 @@ impl Decode for LenientUuid {
         let either = Either::<Uuid, StringUuid>::decode(input, ops);
         either.map(|(either, p)| {
             let uuid = either.either(|u| u, |s| s.0);
-            (LenientUuid(uuid), p)
+            (Self(uuid), p)
         })
     }
 }

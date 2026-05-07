@@ -27,9 +27,9 @@ pub enum Color {
 impl Encode for Color {
     fn encode<O: DynamicOps>(&self, ops: &'static O, prefix: O::Value) -> DataResult<O::Value> {
         let string = match self {
-            Color::Reset => "reset".to_string(),
-            Color::Rgb(c) => format!("#{:06X}", u32::from(*c)),
-            Color::Named(c) => <&str>::from(*c).to_string(),
+            Self::Reset => "reset".to_string(),
+            Self::Rgb(c) => format!("#{:06X}", u32::from(*c)),
+            Self::Named(c) => <&str>::from(*c).to_string(),
         };
         string.encode(ops, prefix)
     }
@@ -37,7 +37,7 @@ impl Encode for Color {
 
 impl Decode for Color {
     fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
-        String::decode(input, ops).flat_map(|(s, v)| Color::parse_from(&s).map(|c| (c, v)))
+        String::decode(input, ops).flat_map(|(s, v)| Self::parse_from(&s).map(|c| (c, v)))
     }
 }
 
@@ -184,8 +184,16 @@ impl Color {
     }
 
     pub fn parse_from(color: &str) -> DataResult<Self> {
-        if color.starts_with('#') {
-            i32::from_str_radix(&color[1..], 16).map_or_else(
+        color.strip_prefix('#').map_or_else(
+            || if color == "reset" {
+                DataResult::new_success(Self::Reset)
+            } else {
+                NamedColor::try_from(color).map_or_else(
+                    |()| DataResult::new_error(format!("Invalid color name: {color}")),
+                    |c| DataResult::new_success(Self::Named(c)),
+                )
+            },
+            |stripped| i32::from_str_radix(stripped, 16).map_or_else(
                 |_| DataResult::new_error(format!("Invalid color value: {color}")),
                 |c| {
                     if (0..16777215).contains(&c) {
@@ -195,14 +203,7 @@ impl Color {
                     }
                 },
             )
-        } else if color == "reset" {
-            DataResult::new_success(Self::Reset)
-        } else {
-            NamedColor::try_from(color).map_or_else(
-                |_| DataResult::new_error(format!("Invalid color name: {color}")),
-                |c| DataResult::new_success(Self::Named(c)),
-            )
-        }
+        )
     }
 }
 
@@ -245,7 +246,7 @@ impl From<i32> for RGBColor {
 
 impl From<RGBColor> for u32 {
     fn from(value: RGBColor) -> Self {
-        (value.red as u32) << 16 | (value.green as u32) << 8 | (value.blue as u32)
+        (value.red as Self) << 16 | (value.green as Self) << 8 | (value.blue as Self)
     }
 }
 
@@ -292,10 +293,10 @@ impl From<i32> for ARGBColor {
 
 impl From<ARGBColor> for i32 {
     fn from(value: ARGBColor) -> Self {
-        (value.alpha as i32) << 24 |
-        (value.red as i32) << 16 |
-        (value.green as i32) << 8 |
-        (value.blue as i32)
+        (value.alpha as Self) << 24 |
+        (value.red as Self) << 16 |
+        (value.green as Self) << 8 |
+        (value.blue as Self)
     }
 }
 
@@ -320,7 +321,7 @@ impl Decode for ARGBColor {
     fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
         let either = Either::<i32, Vector4<f32>>::decode(input, ops);
         either.map(|(e, p)| {
-            let color = e.either(|l| Self::from(l), |r| Self::from(r));
+            let color = e.either(Self::from, Self::from);
             (color, p)
         })
     }

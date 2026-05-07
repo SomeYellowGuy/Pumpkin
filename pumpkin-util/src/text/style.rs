@@ -197,4 +197,21 @@ impl Style {
         self.shadow_color = Some(color);
         self
     }
+
+    /// Returns whether this `Style` is empty.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.color.is_none()
+        && self.bold.is_none()
+        && self.italic.is_none()
+        && self.underlined.is_none()
+        && self.strikethrough.is_none()
+        && self.obfuscated.is_none()
+        && self.insertion.is_none()
+        && self.click_event.is_none()
+        && self.hover_event.is_none()
+        && self.font.is_none()
+        && self.shadow_color.is_none()
+    }
 }
+

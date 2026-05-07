@@ -191,7 +191,7 @@ impl TextComponentBase {
                     translate.to_string(),
                     locale,
                     with.clone(),
-                    fallback.as_ref().cloned(),
+                    fallback.clone(),
                 ));
             }
             TextContent::EntityNames { selector, .. } => text.push_str(selector),
@@ -347,6 +347,16 @@ impl TextComponentBase {
             content: component.content,
             style,
             extra,
+        }
+    }
+
+    /// Tries to collapse this `TextComponentBase` to a single `String`.
+    #[must_use]
+    pub fn collapse_to_string(&self) -> Option<String> {
+        if let TextContent::Text { text } = self.content.as_ref() && self.extra.is_empty() && self.style.is_empty() {
+            Some(text.to_string())
+        } else {
+            None
         }
     }
 }
