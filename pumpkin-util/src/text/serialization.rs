@@ -7,7 +7,7 @@ use pumpkin_codecs::codec::{
     FieldDecode, FieldEncode, MapDecode, MapEncode, optional_field::OptionalFieldEncode,
 };
 use pumpkin_codecs::struct_builder::StructBuilder;
-use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode, Lifecycle, MapLike};
+use pumpkin_codecs::{DataResult, Decode, DynamicOps, Encode, Lifecycle, MapLike, Number};
 use std::borrow::Cow;
 
 impl TextComponentBase {
@@ -138,6 +138,55 @@ impl Decode for TextComponent {
     }
 }
 
+// An accepted primitive substitution argument for translatable `TextComponent`s.
+enum TranslatableArg {
+    Text(TextComponentBase),
+    Number(Number),
+    String(String),
+    Bool(bool)
+}
+
+impl From<TranslatableArg> for TextComponentBase {
+    fn from(value: TranslatableArg) -> Self {
+        match value {
+            TranslatableArg::Text(t) => t,
+            TranslatableArg::Number(n) => Self {
+                content: Box::new(TextContent::Text { text: n.to_string().into() }),
+                style: Box::new(Style::default()),
+                extra: vec![],
+            },
+            TranslatableArg::String(s) => Self {
+                content: Box::new(TextContent::Text { text: s.into() }),
+                style: Box::new(Style::default()),
+                extra: vec![],
+            },
+            TranslatableArg::Bool(b) => Self {
+                content: Box::new(TextContent::Text { text: b.to_string().into() }),
+                style: Box::new(Style::default()),
+                extra: vec![],
+            },
+        }
+    }
+}
+
+impl Decode for TranslatableArg {
+    fn decode<O: DynamicOps>(input: O::Value, ops: &'static O) -> DataResult<(Self, O::Value)> {
+        let number = ops.get_number(&input);
+        if number.is_success() {
+            return number.map(|n| (Self::Number(n), ops.empty()));
+        }
+        let string = ops.get_string(&input);
+        if string.is_success() {
+            return string.map(|s| (Self::String(s), ops.empty()));
+        }
+        let boolean = ops.get_bool(&input);
+        if boolean.is_success() {
+            return boolean.map(|b| (Self::Bool(b), ops.empty()));
+        }
+        TextComponentBase::decode(input, ops).map(|(t, p)| (Self::Text(t), p))
+    }
+}
+
 impl TextContent {
     fn map_encode_specific<O: DynamicOps, B: StructBuilder<Value = O::Value>>(
         &self,
@@ -193,15 +242,14 @@ impl TextContent {
                 let fallback = Option::<Cow<'static, str>>::decode_optional_field(
                     "fallback", input, ops, true,
                 );
-                // TODO: accept many other things as well here
-                let with = Option::<Vec<TextComponentBase>>::decode_optional_field(
+                let with = Option::<Vec<TranslatableArg>>::decode_optional_field(
                     "with", input, ops, false,
                 );
                 translate.apply_3(
                     |translate, fallback, with| Self::Translate {
                         translate,
                         fallback,
-                        with: with.unwrap_or_else(Vec::new),
+                        with: with.unwrap_or_else(Vec::new).into_iter().map(|arg| arg.into()).collect(),
                         bedrock_translate: None,
                     },
                     fallback,
@@ -445,6 +493,16 @@ mod test {
             TextComponent::translate(
                 "example",
                 [TextComponent::text("123"), TextComponent::text("456")]
+            )
+        );
+        // Even primitive types work.
+        assert_decode_success!(
+            TextComponent,
+            json!({"translatable": "example", "with": [1234, 5678, true]}),
+            JsonOps,
+            TextComponent::translate(
+                "example",
+                [TextComponent::text("1234"), TextComponent::text("5678"), TextComponent::text("true")]
             )
         );
 

@@ -1,5 +1,5 @@
 use crate::codec::primitive::sealed::Primitive;
-use crate::{DataResult, Decode, DynamicOps, Encode};
+use crate::{DataResult, Decode, DynamicOps, Encode, Number};
 use std::borrow::Cow;
 
 mod sealed {
@@ -113,6 +113,16 @@ impl Primitive for String {
 
     fn primitive_decode<O: DynamicOps>(ops: &'static O, input: O::Value) -> DataResult<Self> {
         ops.get_string(&input)
+    }
+}
+
+impl Primitive for Number {
+    fn primitive_encode<O: DynamicOps>(&self, ops: &'static O) -> O::Value {
+        ops.create_number(*self)
+    }
+
+    fn primitive_decode<O: DynamicOps>(ops: &'static O, input: O::Value) -> DataResult<Self> {
+        ops.get_number(&input)
     }
 }
 
