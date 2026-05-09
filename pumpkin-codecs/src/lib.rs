@@ -8,6 +8,7 @@ pub mod struct_builder;
 
 pub mod codec;
 mod number;
+pub mod rust_ops;
 
 pub use crate::data_result::DataResult;
 pub use crate::data_result::FlatTryFrom;
