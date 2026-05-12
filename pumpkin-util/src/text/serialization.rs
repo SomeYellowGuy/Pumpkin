@@ -143,7 +143,7 @@ enum TranslatableArg {
     Text(TextComponentBase),
     Number(Number),
     String(String),
-    Bool(bool)
+    Bool(bool),
 }
 
 impl From<TranslatableArg> for TextComponentBase {
@@ -151,7 +151,9 @@ impl From<TranslatableArg> for TextComponentBase {
         match value {
             TranslatableArg::Text(t) => t,
             TranslatableArg::Number(n) => Self {
-                content: Box::new(TextContent::Text { text: n.to_string().into() }),
+                content: Box::new(TextContent::Text {
+                    text: n.to_string().into(),
+                }),
                 style: Box::new(Style::default()),
                 extra: vec![],
             },
@@ -161,7 +163,9 @@ impl From<TranslatableArg> for TextComponentBase {
                 extra: vec![],
             },
             TranslatableArg::Bool(b) => Self {
-                content: Box::new(TextContent::Text { text: b.to_string().into() }),
+                content: Box::new(TextContent::Text {
+                    text: b.to_string().into(),
+                }),
                 style: Box::new(Style::default()),
                 extra: vec![],
             },
@@ -249,7 +253,11 @@ impl TextContent {
                     |translate, fallback, with| Self::Translate {
                         translate,
                         fallback,
-                        with: with.unwrap_or_else(Vec::new).into_iter().map(|arg| arg.into()).collect(),
+                        with: with
+                            .unwrap_or_else(Vec::new)
+                            .into_iter()
+                            .map(TextComponentBase::from)
+                            .collect(),
                         bedrock_translate: None,
                     },
                     fallback,
@@ -371,7 +379,6 @@ impl MapDecode for TextContent {
 
 #[cfg(test)]
 mod test {
-    use std::borrow::Cow;
     use crate::text::click::ClickEvent;
     use crate::text::color::{ARGBColor, Color, NamedColor, RGBColor};
     use crate::text::hover::HoverEvent;
@@ -383,6 +390,7 @@ mod test {
         assert_decode, assert_decode_success, assert_encode, assert_encode_success,
     };
     use serde_json::json;
+    use std::borrow::Cow;
     use uuid::Uuid;
 
     macro_rules! text_content_component {
@@ -502,7 +510,11 @@ mod test {
             JsonOps,
             TextComponent::translate(
                 "example",
-                [TextComponent::text("1234"), TextComponent::text("5678"), TextComponent::text("true")]
+                [
+                    TextComponent::text("1234"),
+                    TextComponent::text("5678"),
+                    TextComponent::text("true")
+                ]
             )
         );
 
