@@ -322,7 +322,7 @@ fn encode_from_field_data(
             &data,
         ) {
             // `flatten` does not work with any modifiers.
-            FieldKind::Flatten => unimplemented!(),
+            FieldKind::Flatten => quote! {},
             FieldKind::Option { .. } => quote! {
                 builder = #codecs_crate::struct_builder::StructBuilder::with_errors_from(builder, &r);
                 builder = match r {

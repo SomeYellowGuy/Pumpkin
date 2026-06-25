@@ -254,7 +254,7 @@ fn derive_single_variant_decode(
             Fields::Unnamed(_) => quote! {
                 |a| (#variant_tokens (a), #codecs_crate::DynamicOps::empty(ops))
             },
-            Fields::Unit => unreachable!(),
+            Fields::Unit => quote! {},
         }
     } else {
         match fields {

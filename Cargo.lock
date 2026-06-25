@@ -2680,7 +2680,6 @@ dependencies = [
  "num-bigint",
  "ordered-float",
  "postcard",
- "proc-macro-crate",
  "pumpkin-codecs",
  "pumpkin-config",
  "pumpkin-data",
@@ -2732,6 +2731,7 @@ name = "pumpkin-codecs"
 version = "0.1.0-dev+26.2"
 dependencies = [
  "either",
+ "pumpkin-codecs-macros",
  "serde_json",
  "tracing",
 ]
@@ -2740,6 +2740,7 @@ dependencies = [
 name = "pumpkin-codecs-macros"
 version = "0.1.0-dev+26.2"
 dependencies = [
+ "heck",
  "proc-macro-crate",
  "proc-macro-error2",
  "quote",
